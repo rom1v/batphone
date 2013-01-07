@@ -35,6 +35,7 @@ import org.servalproject.provider.RhizomeProvider;
 import org.servalproject.rhizome.RhizomeManifest.MissingField;
 import org.servalproject.rhizome.RhizomeMessageLogEntry.TooLongException;
 import org.servalproject.servald.BundleId;
+import org.servalproject.servald.FileHash;
 import org.servalproject.servald.Identity;
 import org.servalproject.servald.ServalD;
 import org.servalproject.servald.ServalD.RhizomeAddFileResult;
@@ -146,7 +147,7 @@ public class Rhizome {
 		ServalD.rhizomeExtractManifest(manifestId, manifestFile);
 		RhizomeManifest_MeshMS man = RhizomeManifest_MeshMS
 				.readFromFile(manifestFile);
-		ServalD.rhizomeExtractFile(man.getFilehash(), payloadFile);
+		ServalD.rhizomeExtractFile(manifestId, payloadFile);
 
 		if (!sender.equals(man.getSender())
 				|| !recipient.equals(man.getRecipient()))
@@ -197,6 +198,8 @@ public class Rhizome {
 			man = new RhizomeManifest_MeshMS();
 			man.setSender(sender);
 			man.setRecipient(recipient);
+			man.setCrypt(recipient.isBroadcast() ? 0 : 1);
+
 			payloadFile.delete();
 			payloadFile.createNewFile();
 		}
@@ -256,24 +259,30 @@ public class Rhizome {
 		try {
 			File dir = getMeshmsStageDirectoryCreated();
 			incomingPayloadFile = File.createTempFile("incoming", ".payload", dir);
-			extractPayload(incomingManifest.getFilehash(), incomingPayloadFile);
-			SubscriberId other = incomingManifest.getSender();
-			SubscriberId self = incomingManifest.getRecipient();
+			extractPayload(incomingManifest, incomingPayloadFile);
+			SubscriberId sender = incomingManifest.getSender();
+			SubscriberId recipient = incomingManifest.getRecipient();
 
-			Identity main = Identity.getMainIdentity();
+			Identity self = null;
+			{
+				for (Identity i : Identity.getIdentities()) {
+					if (i.sid.equals(sender)) {
+						Log.e(Rhizome.TAG, "Ignoring message log that we sent");
+						return false;
+					}
 
-			if (main.sid.equals(other)) {
-				Log.e(Rhizome.TAG, "Ignoring message log that we sent");
-				return false;
+					if (i.sid.equals(recipient))
+						self = i;
+				}
 			}
 
-			// Ensure that the recipient is us, or is broadcast.
-			if (!self.isBroadcast() && !main.sid.equals(self)) {
+			if (recipient.isBroadcast())
+				self = Identity.getMainIdentity();
+
+			if (self == null) {
 				Log.e(Rhizome.TAG,
-						"incoming MeshMS manifest recipient (" + self
-								+ ") is not self ("
-								+ main.sid
-								+ ") -- discarding");
+						"incoming MeshMS manifest recipient (" + recipient
+								+ ") is not a local identity -- ignoring");
 				return false;
 			}
 
@@ -287,7 +296,7 @@ public class Rhizome {
 
 			RhizomeListResult found = ServalD.rhizomeList(
 					RhizomeManifest_MeshMS.SERVICE,
-					main.sid, other, -1, -1);
+					self.sid, sender, -1, -1);
 			long lastAckMessageTime = 0;
 
 			// look at all possible outgoing logs, trying to find the last ack
@@ -299,12 +308,12 @@ public class Rhizome {
 				File testManifestFile = null;
 				File testPayloadFile = null;
 				try {
-					BundleId testManifestId = new BundleId(found.list[0][found.columns.get("id")]);
+					BundleId testManifestId = new BundleId(
+							found.list[i][found.columns.get("id")]);
 					testManifestFile = File.createTempFile("outgoing", ".manifest", dir);
 					testPayloadFile = File.createTempFile("outgoing", ".payload", dir);
 					// Extract the outgoing manifest and payload files.
-					extractExistingMeshMSBundle(testManifestId,
-							main.sid, other, testManifestFile, testPayloadFile);
+					extractExistingMeshMSBundle(testManifestId, self.sid, sender, testManifestFile, testPayloadFile);
 					// Look for most recent ACK packet in the outgoing message log.
 					RandomAccessFile outgoingPayload = new RandomAccessFile(testPayloadFile, "r");
 					try {
@@ -314,6 +323,7 @@ public class Rhizome {
 							RhizomeMessageLogEntry entry = new RhizomeMessageLogEntry(outgoingPayload, true);
 							if (!(entry.filling instanceof RhizomeAck))
 								continue;
+
 							RhizomeAck ack = (RhizomeAck) entry.filling;
 							// remember the time of the last message we acked from this sender.
 							if (ack.messageTime > lastAckMessageTime)
@@ -390,13 +400,13 @@ public class Rhizome {
 						lastMessage = message;
 					// keep the list ordered based on file order, even though we
 					// are parsing backwards
-					messages.addFirst(message.toMeshMs(other, self));
+					messages.addFirst(message.toMeshMs(sender, recipient));
 				}
 			}
 			if (latestIncomingAck != null) {
 				Log.i(TAG, "MESHMS RECEIVED ACK"
-						+ " senderSID=" + other
-						+ " recipientSID=" + self
+						+ " senderSID=" + sender
+						+ " recipientSID=" + recipient
 						+ " millis=" + latestIncomingAck.messageTime
 						+ " offset=" + latestIncomingAck.offset
 					);
@@ -429,13 +439,14 @@ public class Rhizome {
 					outgoingManifest.unsetDateMillis();
 				} else {
 					outgoingManifest = new RhizomeManifest_MeshMS();
-					outgoingManifest.setSender(self);
-					outgoingManifest.setRecipient(other);
+					outgoingManifest.setSender(self.sid);
+					outgoingManifest.setRecipient(sender);
+					outgoingManifest.setCrypt(1);
 				}
 				outgoingManifest.writeTo(outgoingManifestFile);
 				Log.d(TAG, "rhizomeAddFile(" + outgoingPayloadFile + " (" + outgoingPayloadFile.length() + " bytes), " + outgoingManifest + ")");
 				ServalD.rhizomeAddFile(outgoingPayloadFile,
-						outgoingManifestFile, main.sid, null);
+						outgoingManifestFile, self.sid, null);
 				// These INFO messages used for automated testing, do not change or remove!
 				for (SimpleMeshMS sms: messages) {
 					Log.i(TAG, "MESHMS RECEIVED"
@@ -448,8 +459,8 @@ public class Rhizome {
 						);
 				}
 				Log.i(TAG, "MESHMS SENT ACK"
-						+ " senderSID=" + self
-						+ " recipientSID=" + other
+						+ " senderSID=" + recipient
+						+ " recipientSID=" + sender
 						+ " millis=" + ack.messageTime
 						+ " offset=" + ack.offset
 					);
@@ -504,8 +515,7 @@ public class Rhizome {
 	public static boolean addFile(File path) {
 		Log.d(TAG, "Rhizome.addFile(path=" + path + ")");
 		try {
-			RhizomeAddFileResult res = ServalD.rhizomeAddFile(path, null,
-					Identity.getMainIdentity().sid, null);
+			RhizomeAddFileResult res = ServalD.rhizomeAddFile(path, null, Identity.getMainIdentity().sid, null);
 			Log.d(TAG, "service=" + res.service);
 			Log.d(TAG, "manifestId=" + res.manifestId);
 			Log.d(TAG, "fileSize=" + res.fileSize);
@@ -550,8 +560,7 @@ public class Rhizome {
 			unsharedManifest.setDateMillis(millis);
 			unsharedManifest.unsetFilehash();
 			unsharedManifest.writeTo(manifestFile);
-			RhizomeAddFileResult res = ServalD.rhizomeAddFile(null,
-					manifestFile, Identity.getMainIdentity().sid, null);
+			RhizomeAddFileResult res = ServalD.rhizomeAddFile(null, manifestFile, Identity.getMainIdentity().sid, null);
 			Log.d(TAG, "service=" + res.service);
 			Log.d(TAG, "manifestId=" + res.manifestId);
 			Log.d(TAG, "fileSize=" + res.fileSize);
@@ -613,8 +622,8 @@ public class Rhizome {
 				}
 			} else
 				Log.v(TAG, "Disabling rhizome");
-
-			ServalD.setConfig("rhizome.enabled", enable ? "1" : "0");
+			ServalD.delConfig("rhizome.enabled");
+			ServalD.setConfig("rhizome.enable", enable ? "1" : "0");
 			if (enable != alreadyEnabled)
 				Control.reloadConfig();
 		} catch (ServalDFailureException e) {
@@ -622,13 +631,22 @@ public class Rhizome {
 		}
 	}
 
-	private static File getStoragePath(String subpath)
-			throws FileNotFoundException {
+	private static File getStoragePath(String subpath) throws FileNotFoundException {
 		File folder = ServalBatPhoneApplication.getStorageFolder();
 		if (folder == null)
-			throw new FileNotFoundException(
-					"External storage is not available.");
+			throw new FileNotFoundException("External storage is not available.");
 		return new File(folder, subpath);
+	}
+
+	private static File createDirectory(File dir) throws IOException {
+		try {
+			if (!dir.isDirectory() && !dir.mkdirs())
+				throw new IOException("cannot mkdirs: " + dir);
+			return dir;
+		}
+		catch (SecurityException e) {
+			throw new IOException("no permission to create " + dir);
+		}
 	}
 
 	/**
@@ -639,6 +657,45 @@ public class Rhizome {
 	 */
 	public static File getStorageDirectory() throws FileNotFoundException {
 		return getStoragePath("rhizome");
+	}
+
+	/**
+	 * Return the path of the directory where rhizome temporary files can be created.
+	 * All files in this directory may be deleted on app start.
+	 *
+	 * @author Andrew Bettison <andrew@servalproject.com>
+	 * @throws FileNotFoundException
+	 */
+	public static File getTempDirectory() throws FileNotFoundException {
+		return getStoragePath("rhizome/tmp");
+	}
+
+	/**
+	 * Return the path of the directory where rhizome temporary files can be created, after ensuring
+	 * the directory exists.  All files in this directory may be deleted on app start.
+	 *
+	 * @author Andrew Bettison <andrew@servalproject.com>
+	 * @throws FileNotFoundException
+	 */
+	public static File getTempDirectoryCreated() throws IOException {
+		return createDirectory(getTempDirectory());
+	}
+
+	/**
+	 * Remove all files from the temporary directory.
+	 *
+	 * @author Andrew Bettison <andrew@servalproject.com>
+	 */
+	public static void cleanTemp() {
+		try {
+			File dir = getTempDirectory();
+			if (dir.isDirectory())
+				for (File file: dir.listFiles())
+					safeDelete(file);
+		}
+		catch (Exception e) {
+			Log.w(Rhizome.TAG, "error cleaning Rhizome temporary directory", e);
+		}
 	}
 
 	/**
@@ -657,15 +714,7 @@ public class Rhizome {
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
 	public static File getSaveDirectoryCreated() throws IOException {
-		File dir = getSaveDirectory();
-		try {
-			if (!dir.isDirectory() && !dir.mkdirs())
-				throw new IOException("cannot mkdirs " + dir);
-			return dir;
-		}
-		catch (SecurityException e) {
-			throw new IOException("no permission to create " + dir);
-		}
+		return createDirectory(getSaveDirectory());
 	}
 
 	/**
@@ -684,15 +733,7 @@ public class Rhizome {
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
 	public static File getStageDirectoryCreated() throws IOException {
-		File dir = getStageDirectory();
-		try {
-			if (!dir.isDirectory() && !dir.mkdirs())
-				throw new IOException("cannot mkdirs " + dir);
-			return dir;
-		}
-		catch (SecurityException e) {
-			throw new IOException("no permission to create " + dir);
-		}
+		return createDirectory(getStageDirectory());
 	}
 
 	/** Return the path of the directory where manifest and payload files are staged.
@@ -708,30 +749,12 @@ public class Rhizome {
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
 	public static File getMeshmsStageDirectoryCreated() throws IOException {
-		File dir = getMeshmsStageDirectory();
-		try {
-			if (!dir.isDirectory() && !dir.mkdirs())
-				throw new IOException("cannot mkdirs " + dir);
-			return dir;
-		}
-		catch (SecurityException e) {
-			throw new IOException("no permission to create " + dir);
-		}
+		return createDirectory(getMeshmsStageDirectory());
 	}
 
-	public static RhizomeManifest readManifest(BundleId bid)
-			throws ServalDFailureException, ServalDInterfaceError, IOException,
-			RhizomeManifestSizeException, RhizomeManifestParseException,
-			RhizomeManifestServiceException
+	public static RhizomeManifest readManifest(BundleId bid) throws ServalDFailureException, ServalDInterfaceError
 	{
-		// XXX - Should read manifest direct from database using the supplied ID.
-		File tempFile = File.createTempFile("manifest", ".tmp");
-		try {
-			ServalD.rhizomeExtractManifest(bid, tempFile);
-			return RhizomeManifest.readFromFile(tempFile);
-		} finally {
-			tempFile.delete();
-		}
+		return ServalD.rhizomeExtractManifest(bid, null).manifest;
 	}
 
 	/** Extract a manifest and its payload (a "bundle") from the rhizome database.  Stores them
@@ -868,9 +891,14 @@ public class Rhizome {
 		RhizomeExtractManifestResult mres = ServalD.rhizomeExtractManifest(manifestId, manifestFile);
 		if (mres.fileSize == 0)
 			return false;
-		RhizomeExtractFileResult fres = extractPayload(mres.fileHash, payloadFile);
+		RhizomeExtractFileResult fres = extractPayload(manifestId, payloadFile);
 		if (mres.fileSize != fres.fileSize) {
 			Log.w(Rhizome.TAG, "extracted file lengths differ: mres.fileSize=" + mres.fileSize + ", fres.fileSize=" + fres.fileSize);
+			return false;
+		}
+		if (!mres.fileHash.equals(fres.fileHash)) {
+			Log.w(Rhizome.TAG, "extracted file hash differ: mres.fileHash="
+					+ mres.fileHash + ", fres.fileHash=" + fres.fileHash);
 			return false;
 		}
 		return true;
@@ -880,12 +908,12 @@ public class Rhizome {
 	 *
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
-	protected static RhizomeExtractFileResult extractPayload(String fileHash, File payloadFile)
+	protected static RhizomeExtractFileResult extractPayload(
+			BundleId manifestId, File payloadFile)
 		throws ServalDFailureException, ServalDInterfaceError
 	{
-		RhizomeExtractFileResult fres = ServalD.rhizomeExtractFile(fileHash, payloadFile);
-		if (!fileHash.equals(fres.fileHash))
-			Log.w(Rhizome.TAG, "extracted file hash inconsist: requested filehash=" + fileHash + ", got fres.fileHash=" + fres.fileHash);
+		RhizomeExtractFileResult fres = ServalD.rhizomeExtractFile(manifestId,
+				payloadFile);
 		return fres;
 	}
 
@@ -896,11 +924,18 @@ public class Rhizome {
 	protected static RhizomeExtractFileResult extractPayload(RhizomeManifest man, File payloadFile)
 		throws RhizomeManifest.MissingField, ServalDFailureException, ServalDInterfaceError
 	{
-		RhizomeExtractFileResult fres = extractPayload(man.getFilehash(), payloadFile);
+		RhizomeExtractFileResult fres = extractPayload(man.getManifestId(),
+				payloadFile);
 		try {
 			long fileSize = man.getFilesize();
 			if (fileSize != fres.fileSize)
 				Log.w(Rhizome.TAG, "extracted file lengths differ: manifest.filesize=" + fileSize + ", fres.fileSize=" + fres.fileSize);
+			FileHash fileHash = man.getFilehash();
+			if (!fileHash.equals(fres.fileHash))
+				Log.w(Rhizome.TAG,
+						"extracted file hash inconsist: requested filehash="
+								+ fileHash + ", got fres.fileHash="
+								+ fres.fileHash);
 		}
 		catch (RhizomeManifest.MissingField e) {
 			Log.w(Rhizome.TAG, "not checking filesize consistency", e);
@@ -982,7 +1017,7 @@ public class Rhizome {
 
 						mBroadcastIntent.setDataAndType(Uri.parse("content://"
 								+ RhizomeProvider.AUTHORITY + "/"
-								+ file.getFilehash()), contentType);
+								+ file.getManifestId().toHex()), contentType);
 
 						mBroadcastIntent.putExtras(file.asBundle());
 						Log.v(TAG, "Sending broadcast for " + file.getDisplayName());

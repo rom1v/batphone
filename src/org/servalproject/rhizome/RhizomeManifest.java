@@ -35,6 +35,7 @@ import java.util.Properties;
 
 import org.servalproject.servald.BundleId;
 import org.servalproject.servald.BundleKey;
+import org.servalproject.servald.FileHash;
 import org.servalproject.servald.SubscriberId;
 
 import android.os.Bundle;
@@ -69,8 +70,9 @@ public abstract class RhizomeManifest implements Cloneable {
 	protected Long mDateMillis;
 	protected Long mVersion;
 	protected Long mFilesize;
-	protected String mFilehash;
+	protected FileHash mFilehash;
 	protected BundleKey mBundleKey;
+	protected Long mCrypt;
 
 	/** Construct a Rhizome manifest from its byte-stream representation.
 	 *
@@ -176,6 +178,7 @@ public abstract class RhizomeManifest implements Cloneable {
 		mBundleKey = null;
 		mBundle = null;
 		mSignatureBlock = null;
+		mCrypt = null;
 	}
 
 	/** Construct a Rhizome manifest from an Android Bundle containing various manifest fields.
@@ -189,6 +192,7 @@ public abstract class RhizomeManifest implements Cloneable {
 		mDateMillis = parseULong("date", b.getString("date"));
 		mVersion = parseULong("version", b.getString("version"));
 		mFilesize = parseULong("filesize", b.getString("filesize"));
+		mCrypt = parseULong("crypt", b.getString("crypt"));
 		mFilehash = (mFilesize != null && mFilesize != 0) ? parseFilehash("filehash", b.getString("filehash")) : null;
 		String bk = b.getString("BK");
 		if (bk != null)
@@ -274,17 +278,20 @@ public abstract class RhizomeManifest implements Cloneable {
 	/** Helper method for constructors.
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
-	protected static String parseFilehash(String fieldName, String text) throws RhizomeManifestParseException {
+	protected static FileHash parseFilehash(String fieldName, String text) throws RhizomeManifestParseException {
 		return validateFilehash(fieldName, parseNonEmpty(fieldName, text));
 	}
 
 	/** Helper method for constructors and setters.
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
-	protected static String validateFilehash(String fieldName, String value) throws RhizomeManifestParseException {
-		if (value != null && !(value.length() == FILE_HASH_HEXCHARS && value.matches("\\A\\p{XDigit}+\\z")))
-			throw new RhizomeManifestParseException("invalid " + fieldName +" (hash): '" + value + "'");
-		return value;
+	protected static FileHash validateFilehash(String fieldName, String value) throws RhizomeManifestParseException {
+		try {
+			return value == null ? null : new FileHash(value);
+		}
+		catch (FileHash.InvalidHexException e) {
+			throw new RhizomeManifestParseException("invalid " + fieldName +" (hash): '" + value + "'", e);
+		}
 	}
 
 	/** Helper method for constructors.
@@ -377,6 +384,7 @@ public abstract class RhizomeManifest implements Cloneable {
 		mBundle.putString("filesize", mFilesize == null ? null : "" + mFilesize);
 		mBundle.putString("filehash", mFilehash == null ? null : "" + mFilehash);
 		mBundle.putString("BK", mBundleKey == null ? null : "" + mBundleKey);
+		mBundle.putString("crypt", mCrypt == null ? null : "" + mCrypt);
 	}
 
 	@Override
@@ -522,11 +530,24 @@ public abstract class RhizomeManifest implements Cloneable {
 		mFilesize = null;
 	}
 
+	public long getCrypt() throws MissingField {
+		missingIfNull("crypt", mCrypt);
+		return mCrypt;
+	}
+
+	public void setCrypt(long crypt) {
+		this.mCrypt = crypt;
+	}
+
+	public void unsetCrypt() {
+		mCrypt = null;
+	}
+
 	/** Return the 'filehash' field as a String.
 	 * @throws MissingField if the field is not present
 	 * @author Andrew Bettison <andrew@servalproject.com>
 	 */
-	public String getFilehash() throws MissingField {
+	public FileHash getFilehash() throws MissingField {
 		missingIfNull("filehash", mFilehash);
 		return mFilehash;
 	}

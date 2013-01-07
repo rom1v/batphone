@@ -204,7 +204,7 @@ public class Control extends Service {
 		if (app.servaldMonitor == null) {
 			app.servaldMonitor = new ServalDMonitor(
 					new Messages(app));
-
+			CallHandler.registerMessageHandlers(app.servaldMonitor);
 			new Thread(app.servaldMonitor, "Monitor").start();
 		}
 
@@ -339,37 +339,21 @@ public class Control extends Service {
 					updatePeerCount();
 				}
 
-			} else if (cmd.equalsIgnoreCase("AUDIOPACKET")) {
-				// AUDIOPACKET:065384:8:2701:2720
+			} else if (cmd.equalsIgnoreCase("AUDIO")) {
 				int local_session = ServalDMonitor.parseIntHex(args.next());
 
 				VoMP.Codec codec = VoMP.Codec.getCodec(ServalDMonitor
 						.parseInt(args.next()));
 				int start_time = ServalDMonitor.parseInt(args.next());
-				int end_time = ServalDMonitor.parseInt(args.next());
 				args.next(); // sequence
 				int jitter_delay = ServalDMonitor.parseInt(args.next());
+				int this_delay = ServalDMonitor.parseInt(args.next());
 
 				if (app.callHandler != null) {
 					ret += app.callHandler.receivedAudio(
 							local_session, start_time, jitter_delay,
-							end_time, codec, in, dataBytes);
-				}
-			} else if (cmd.equalsIgnoreCase("CALLFROM")) {
-				try {
-					int local_session = ServalDMonitor.parseIntHex(args.next());
-					args.next(); // local_sid
-					args.next(); // local_did
-					SubscriberId remote_sid = new SubscriberId(args.next());
-					String remote_did = args.next();
-
-					CallHandler.incomingCall(
-							PeerListService.getPeer(
-									ServalBatPhoneApplication.context
-											.getContentResolver(),
-									remote_sid), local_session, remote_did);
-				} catch (SubscriberId.InvalidHexException e) {
-					throw new IOException("invalid SubscriberId token: " + e);
+							this_delay,
+							codec, in, dataBytes);
 				}
 			} else if (cmd.equalsIgnoreCase("HANGUP")) {
 				if (app.callHandler == null)
@@ -425,7 +409,7 @@ public class Control extends Service {
 				// tell servald that we can initiate and answer phone calls, and
 				// the list of codecs we support
 				app.servaldMonitor.sendMessage("monitor vomp "
-						+ VoMP.Codec.Pcm.codeString + " "
+						+ VoMP.Codec.Signed16.codeString + " "
 						+ VoMP.Codec.Ulaw8.codeString + " "
 						+ VoMP.Codec.Alaw8.codeString);
 				app.servaldMonitor

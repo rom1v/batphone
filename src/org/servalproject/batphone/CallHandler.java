@@ -14,6 +14,7 @@ import org.servalproject.batphone.VoMP.State;
 import org.servalproject.servald.DnaResult;
 import org.servalproject.servald.Identity;
 import org.servalproject.servald.Peer;
+import org.servalproject.servald.PeerListService;
 import org.servalproject.servald.ServalDMonitor;
 import org.servalproject.servald.SubscriberId;
 
@@ -39,7 +40,7 @@ public class CallHandler {
 	int local_id = 0;
 	VoMP.State local_state = State.NoSuchCall;
 	VoMP.State remote_state = State.NoSuchCall;
-	VoMP.Codec codec = VoMP.Codec.Pcm;
+	VoMP.Codec codec = VoMP.Codec.Signed16;
 	private long lastKeepAliveTime;
 	private long callStarted = SystemClock.elapsedRealtime();
 	private long callEnded;
@@ -58,14 +59,10 @@ public class CallHandler {
 	private boolean audioRunning = false;
 
 	public static void dial(DnaResult result) throws IOException {
-		ServalBatPhoneApplication app = ServalBatPhoneApplication.context;
-		if (app.callHandler != null)
-			throw new IOException(
-					"Only one call is allowed at a time");
-		app.callHandler = new CallHandler(result.peer);
-		app.callHandler.did = result.did;
-		app.callHandler.name = result.name;
-		app.callHandler.dial();
+		CallHandler call = createCall(result.peer);
+		call.did = result.did;
+		call.name = result.name;
+		call.dial();
 	}
 
 	public static void dial(Peer peer) throws IOException {
@@ -73,29 +70,53 @@ public class CallHandler {
 	}
 
 	public static void dial(UnsecuredCall ui, Peer peer) throws IOException {
+		CallHandler call = createCall(peer);
+		call.ui = ui;
+		call.dial();
+	}
+
+	private static synchronized CallHandler createCall(Peer peer)
+			throws IOException {
 		ServalBatPhoneApplication app = ServalBatPhoneApplication.context;
 		if (app.callHandler != null)
 			throw new IOException(
 					"Only one call is allowed at a time");
 		app.callHandler = new CallHandler(peer);
-		app.callHandler.ui = ui;
-		app.callHandler.dial();
+		return app.callHandler;
 	}
 
-	public static void incomingCall(Peer peer, int local_id, String remote_did)
-			throws IOException {
-		ServalBatPhoneApplication app = ServalBatPhoneApplication.context;
-		if (app.callHandler != null) {
-			app.servaldMonitor.sendMessageAndLog("hangup ",
-					Integer.toHexString(local_id));
-			throw new IOException("Only one call is allowed at a time");
+	private static class IncomingCall implements ServalDMonitor.Message {
+		@Override
+		public int message(String cmd, Iterator<String> args, InputStream in,
+				int dataLength) throws IOException {
+			try {
+				int local_session = ServalDMonitor.parseIntHex(args.next());
+				args.next(); // local_sid
+				args.next(); // local_did
+				SubscriberId remote_sid = new SubscriberId(args.next());
+				String remote_did = args.next();
+
+				Peer peer = PeerListService.getPeer(
+						ServalBatPhoneApplication.context
+								.getContentResolver(),
+						remote_sid);
+
+				CallHandler call = createCall(peer);
+				call.local_id = local_session;
+				call.did = remote_did;
+				call.local_state = State.CallPrep;
+				call.remote_state = State.RingingOut;
+				call.callStateChanged();
+
+				return 0;
+			} catch (SubscriberId.InvalidHexException e) {
+				throw new IOException("invalid SubscriberId token: " + e);
+			}
 		}
-		app.callHandler = new CallHandler(peer);
-		app.callHandler.local_id = local_id;
-		app.callHandler.did = remote_did;
-		app.callHandler.local_state = State.CallPrep;
-		app.callHandler.remote_state = State.RingingOut;
-		app.callHandler.callStateChanged();
+	}
+
+	public static void registerMessageHandlers(ServalDMonitor monitor) {
+		monitor.handlers.put("CALLFROM", new IncomingCall());
 	}
 
 	private CallHandler(Peer peer) {
@@ -246,8 +267,10 @@ public class CallHandler {
 	}
 
 	private void cleanup() {
-		this.recorder.stopRecording();
-		this.player.cleanup();
+		if (this.recorder != null)
+			this.recorder.stopRecording();
+		if (this.player != null)
+			this.player.cleanup();
 		timer.cancel();
 		NotificationManager nm = (NotificationManager) app
 				.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -395,12 +418,12 @@ public class CallHandler {
 	}
 
 	public int receivedAudio(int local_session, int start_time,
-			int jitter_delay, int end_time, VoMP.Codec codec, InputStream in,
+			int jitter_delay, int this_delay, VoMP.Codec codec, InputStream in,
 			int dataBytes) throws IOException {
 		lastKeepAliveTime = SystemClock.elapsedRealtime();
 		return player.receivedAudio(
-				local_session, start_time, jitter_delay,
-				end_time, codec, in, dataBytes);
+				local_session, start_time, jitter_delay, this_delay,
+				codec, in, dataBytes);
 	}
 
 	public void keepAlive(int l_id) {
@@ -426,7 +449,7 @@ public class CallHandler {
 
 	private boolean isSupported(VoMP.Codec codec) {
 		switch (codec) {
-		case Pcm:
+		case Signed16:
 		case Ulaw8:
 		case Alaw8:
 			return true;

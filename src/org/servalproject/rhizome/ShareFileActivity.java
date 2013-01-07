@@ -140,14 +140,15 @@ public class ShareFileActivity extends Activity {
 					File manifestFile = null;
 					try{
 						if (manifest != null) {
-							manifestFile = File.createTempFile("manifest", ".tmp");
+							File dir = Rhizome.getTempDirectoryCreated();
+							manifestFile = File.createTempFile("manifest", ".tmp", dir);
+							manifestFile.deleteOnExit();
 							manifest.writeTo(manifestFile);
 						}
-
-						ServalD.rhizomeAddFile(file, manifestFile,
-								Identity.getMainIdentity().sid, null);
-					}finally{
-						if (manifestFile!=null)
+						ServalD.rhizomeAddFile(file, manifestFile, Identity.getMainIdentity().sid, null);
+					}
+					finally {
+						if (manifestFile != null)
 							manifestFile.delete();
 					}
 
@@ -169,7 +170,7 @@ public class ShareFileActivity extends Activity {
 
 	public static String getRealPathFromURI(Context context, Uri contentUri) {
 		if (contentUri.getScheme().equals("file")) {
-			return contentUri.getEncodedPath();
+			return contentUri.getPath();
 		}
 
 		// can post image
