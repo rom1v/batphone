@@ -27,12 +27,12 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.servalproject.batphone.CallHandler;
 import org.servalproject.servald.AbstractId.InvalidHexException;
+import org.servalproject.servald.AbstractJniResults;
 import org.servalproject.servald.IPeer;
 import org.servalproject.servald.IPeerListListener;
 import org.servalproject.servald.Peer;
 import org.servalproject.servald.PeerComparator;
 import org.servalproject.servald.PeerListService;
-import org.servalproject.servald.ResultCallback;
 import org.servalproject.servald.ServalD;
 import org.servalproject.servald.SubscriberId;
 
@@ -50,9 +50,9 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ListView;
 
 /**
- *
- * @author jeremy
- *
+ * 
+ * @author Jeremy Lakeman <jeremy@servalproject.org>
+ * 
  *         Peer List fetches a list of known peers from the PeerListService.
  *         When a peer is received from the service this activity will attempt
  *         to resolve the peer by calling ServalD in an async task.
@@ -118,7 +118,7 @@ public class PeerList extends ListActivity {
 								p.cacheUntil > SystemClock.elapsedRealtime());
 						setResult(Activity.RESULT_OK, returnIntent);
 						finish();
-					} else if (!p.sid.isBroadcast()) {
+					} else {
 						Log.i(TAG, "calling selected peer " + p);
 						CallHandler.dial(p);
 					}
@@ -167,7 +167,7 @@ public class PeerList extends ListActivity {
 
 			// if we haven't seen recent active network confirmation for the
 			// existence of this peer, don't add to the UI
-			if (!p.stillAlive())
+			if (p.sid.isBroadcast() || !p.stillAlive())
 				return;
 
 			if (p.cacheUntil <= SystemClock.elapsedRealtime())
@@ -232,14 +232,15 @@ public class PeerList extends ListActivity {
 	private synchronized void refresh() {
 		final long now = SystemClock.elapsedRealtime();
 		refreshing = true;
-		ServalD.command(new ResultCallback() {
+		ServalD.command(new AbstractJniResults() {
 
 			@Override
-			public boolean result(String value) {
+			public void putBlob(byte[] val) {
 				try {
 					if (!displayed)
-						return false;
+						return;
 
+					String value = new String(val);
 					SubscriberId sid = new SubscriberId(value);
 					PeerListService.peerReachable(getContentResolver(),
 							sid, true);
@@ -259,7 +260,6 @@ public class PeerList extends ListActivity {
 				} catch (InvalidHexException e) {
 					Log.e(TAG, e.toString(), e);
 				}
-				return true;
 			}
 		}, "id", "peers");
 
@@ -285,7 +285,6 @@ public class PeerList extends ListActivity {
 		super.onResume();
 		displayed = true;
 		Control.peerList = this;
-		peers.add(PeerListService.broadcast);
 
 		new AsyncTask<Void, Void, Void>() {
 

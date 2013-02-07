@@ -16,6 +16,12 @@
  * along with this source code; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
+/**
+ * help screens - main screen behaviour
+ *
+ * @author Romana Challans <romana@servalproject.org>
+ */
 package org.servalproject.ui.help;
 
 import org.servalproject.R;
@@ -24,20 +30,23 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.webkit.WebView;
 import android.widget.Button;
-
-/**
- * help screens - main screen behaviour
- */
 
 
 public class HelpActivity extends Activity {
 
+	private void openHelp(String pageName) {
+		Intent intent = new Intent(this, HtmlHelp.class);
+		intent.putExtra("page", pageName);
+		this.startActivity(intent);
+	}
+
+	WebView HelpreleaseBrowser;
 	@Override
 	public void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
-
 		setContentView(R.layout.helpactivity);
 
 		// Help Screen
@@ -45,8 +54,7 @@ public class HelpActivity extends Activity {
 		btnHelpguide.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View arg0) {
-				HelpActivity.this.startActivity(new Intent(HelpActivity.this,
-						HelpGuide.class));
+				openHelp("helpinterface.html");
 			}
 		});
 
@@ -55,18 +63,16 @@ public class HelpActivity extends Activity {
 		btnSecurity.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View arg0) {
-				HelpActivity.this.startActivity(new Intent(HelpActivity.this,
-						SecurityScreen.class));
+				openHelp("helpsecurity.html");
 			}
 		});
 
-		// Permissions Screen
-		Button btnPermissions = (Button) this.findViewById(R.id.btnPermissions);
-		btnPermissions.setOnClickListener(new View.OnClickListener() {
+		// Accounts and Contacts Screen
+		Button btnAccounts = (Button) this.findViewById(R.id.btnAccounts);
+		btnAccounts.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View arg0) {
-				HelpActivity.this.startActivity(new Intent(HelpActivity.this,
-						PermissionsScreen.class));
+				openHelp("helpaccounts.html");
 			}
 		});
 
@@ -75,8 +81,9 @@ public class HelpActivity extends Activity {
 		btnAbout.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View arg0) {
-				HelpActivity.this.startActivity(new Intent(HelpActivity.this,
-						AboutScreen.class));
+				Intent intent = new Intent(HelpActivity.this, AboutScreen.class);
+				intent.putExtra("page", "helpabout.html");
+				HelpActivity.this.startActivity(intent);
 			}
 		});
 
@@ -95,8 +102,16 @@ public class HelpActivity extends Activity {
 		btnLinks.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View arg0) {
-				HelpActivity.this.startActivity(new Intent(HelpActivity.this,
-						LinksScreen.class));
+				openHelp("helplinks.html");
+			}
+		});
+
+		// Licence Screen
+		Button btnLicence = (Button) this.findViewById(R.id.btnLicence);
+		btnLicence.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View arg0) {
+				openHelp("helprelease.html");
 			}
 		});
 

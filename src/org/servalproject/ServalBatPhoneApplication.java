@@ -49,9 +49,10 @@ import java.util.Set;
 import org.servalproject.batphone.CallHandler;
 import org.servalproject.meshms.IncomingMeshMS;
 import org.servalproject.rhizome.Rhizome;
-import org.servalproject.servald.AbstractId.InvalidHexException;
+import org.servalproject.servald.BundleId;
 import org.servalproject.servald.Identity;
-import org.servalproject.servald.ServalDFailureException;
+import org.servalproject.servald.ServalD;
+import org.servalproject.servald.ServalD.RhizomeManifestResult;
 import org.servalproject.servald.ServalDMonitor;
 import org.servalproject.system.BluetoothService;
 import org.servalproject.system.ChipsetDetection;
@@ -59,18 +60,20 @@ import org.servalproject.system.CoreTask;
 import org.servalproject.system.WiFiRadio;
 
 import android.app.Application;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.AssetManager;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
-import android.telephony.PhoneNumberUtils;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -85,8 +88,7 @@ public class ServalBatPhoneApplication extends Application {
 
 	public static final String MSG_TAG = "ADHOC -> AdhocApplication";
 
-	public static final String DEFAULT_LANNETWORK = "10.130.1.110/24";
-	public static final String DEFAULT_SSID = "Mesh";
+	public static final String DEFAULT_SSID = "mesh.servalproject.org";
 	public static final String DEFAULT_CHANNEL = "1";
 
 	// Devices-Information
@@ -99,6 +101,7 @@ public class ServalBatPhoneApplication extends Application {
 	// Preferences
 	public SharedPreferences settings = null;
 	public SharedPreferences.Editor preferenceEditor = null;
+	private File ourApk;
 
 	// Various instantiations of classes that we need.
 	public WiFiRadio wifiRadio;
@@ -133,7 +136,7 @@ public class ServalBatPhoneApplication extends Application {
 
 	public static final String ACTION_STATE = "org.servalproject.ACTION_STATE";
 	public static final String EXTRA_STATE = "state";
-	private State state;
+	private State state = State.Broken;
 
 	@Override
 	public void onCreate() {
@@ -236,29 +239,35 @@ public class ServalBatPhoneApplication extends Application {
 	}
 
 	public void checkForUpgrade() {
-		try {
-			String installed = settings.getString("lastInstalled", "");
+		String installed = settings.getString("lastInstalled", "");
 
+		version = this.getString(R.string.version);
+
+		try {
+			// get the apk file timestamp from the package manager to force
+			// install mode even for development builds with the same version
 			PackageInfo info = getPackageManager().getPackageInfo(
 					getPackageName(), 0);
 
-			version = info.versionName;
+			// TODO, in API 9 you can get the installed time from packageinfo
+			ourApk = new File(info.applicationInfo.sourceDir);
+			lastModified = ourApk.lastModified();
+		} catch (Exception e) {
+			Log.v("BatPhone", e.getMessage(), e);
+			this.displayToastMessage("Unable to determine if this application needs to be updated");
+		}
 
-			// force install mode if apk has changed
-			// TODO, in API 9 you can get the installed time from packegeinfo
-			File apk = new File(info.applicationInfo.sourceDir);
-			lastModified = apk.lastModified();
-
-			if (installed.equals("")) {
-				setState(State.Installing);
-			} else if (!installed.equals(version + " " + lastModified)) {
-				// We have a newer version, so schedule it for installation.
-				// Actual installation will be triggered by the preparation
-				// wizard so that the user knows what is going on.
-				setState(State.Upgrading);
-			}
-		} catch (NameNotFoundException e) {
-			Log.v("BatPhone", e.toString(), e);
+		if (installed.equals("")) {
+			setState(State.Installing);
+		} else if (!installed.equals(version + " " + lastModified)) {
+			// We have a newer version, so schedule it for installation.
+			// Actual installation will be triggered by the preparation
+			// wizard so that the user knows what is going on.
+			setState(State.Upgrading);
+		} else {
+			// TODO check rhizome for manifest version of
+			// "installed_manifest_id"
+			// which may have already arrived (and been ignored?)
 		}
 	}
 
@@ -307,7 +316,8 @@ public class ServalBatPhoneApplication extends Application {
 					.getExternalFilesDir(null);
 			if (folder != null)
 				folder.mkdirs();
-		}
+		} else
+			Log.v("BatPhone", "External storage is " + storageState);
 		return folder;
 	}
 
@@ -377,50 +387,11 @@ public class ServalBatPhoneApplication extends Application {
 
 	public CallHandler callHandler;
 
-	protected static boolean terminate_setup = false;
-	protected static boolean terminate_main = false;
+	public static boolean terminate_setup = false;
+	public static boolean terminate_main = false;
 
 	public static boolean wifiSetup = false;
 	public static boolean dontCompleteWifiSetup = false;
-
-	public void setPrimaryNumber(String newNumber, String newName,
-			boolean collectData)
-			throws IOException, ServalDFailureException,
-			IllegalArgumentException, IllegalAccessException,
-			InstantiationException, InvalidHexException {
-		// Create default HLR entry
-		if (newNumber == null || !newNumber.matches("[0-9+*#]{5,31}"))
-			throw new IllegalArgumentException(
-					"The phone number must contain only 0-9+*# and be at least 5 characters in length");
-
-		if (PhoneNumberUtils.isEmergencyNumber(newNumber)
-				|| newNumber.startsWith("11"))
-			throw new IllegalArgumentException(
-					"That number cannot be dialed as it will be redirected to a cellular emergency service.");
-
-		Identity main;
-		List<Identity> identities = Identity.getIdentities();
-		if (identities.size() < 1)
-			main = Identity.createIdentity();
-		else
-			main = identities.get(0);
-
-		main.setDetails(newNumber, newName);
-
-		Control.reloadConfig();
-
-		Editor ed = ServalBatPhoneApplication.this.settings.edit();
-		ed.putBoolean("dataCollection", collectData);
-		ed.commit();
-
-		Intent intent = new Intent("org.servalproject.SET_PRIMARY");
-		intent.putExtra("did", newNumber);
-		intent.putExtra("sid", main.sid.toString());
-		this.sendStickyBroadcast(intent);
-
-		if (collectData)
-			ChipsetDetection.getDetection().uploadLog();
-    }
 
 	private void createEmptyFolders() {
 		// make sure all this folders exist, even if empty
@@ -525,6 +496,46 @@ public class ServalBatPhoneApplication extends Application {
 		}
 	}
 
+	public void notifySoftwareUpdate(BundleId manifestId) {
+		try {
+			Log.v("Batphone", "Prompting to install new version");
+			File newVersion = new File(Rhizome.getTempDirectoryCreated(),
+					manifestId.toHex() + ".apk");
+
+			// use the same path to create a combined payload and manifest
+			ServalD.rhizomeExtractManifestFile(manifestId, newVersion,
+					newVersion);
+
+			// Construct an intent to start the install
+			Intent i = new Intent("android.intent.action.VIEW")
+					.setType("application/vnd.android.package-archive")
+					.setClassName("com.android.packageinstaller",
+							"com.android.packageinstaller.PackageInstallerActivity")
+					.setData(Uri.fromFile(newVersion))
+					.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+			Notification n = new Notification(R.drawable.ic_serval_logo,
+					"A new version of Serval Mesh is available",
+					System.currentTimeMillis());
+
+			n.setLatestEventInfo(this, "Software Update",
+					"A new version of Serval Mesh is available",
+					PendingIntent.getActivity(this, 0, i,
+							PendingIntent.FLAG_ONE_SHOT));
+
+			n.flags = Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE
+					| Notification.FLAG_AUTO_CANCEL;
+
+			NotificationManager nm = (NotificationManager) this
+					.getSystemService(Context.NOTIFICATION_SERVICE);
+			nm.notify("Upgrade", 0, n);
+
+		} catch (Exception e) {
+			Log.e("BatPhone", e.getMessage(), e);
+		}
+
+	}
+
 	public void installFiles() {
 		try{
 			// if we just reinstalled, the old dna process, or asterisk, might
@@ -601,7 +612,8 @@ public class ServalBatPhoneApplication extends Application {
 			ipaddr = settings.getString("lannetworkpref", "");
 
 			// TODO only test for 10/8 once when upgrading past 0.08???
-			if (ipaddr.equals("") || ipaddr.startsWith("10/")) {
+			if (ipaddr.equals("")
+					|| (ipaddr.startsWith("10.") && ipaddr.endsWith("/8"))) {
 				// Set default IP address from the same random data
 				ipaddr = String.format("%d.%d.%d.%d/7", 28 | (bytes[2] & 1),
 						bytes[3] < 0 ? 256 + bytes[3] : bytes[3],
@@ -617,12 +629,36 @@ public class ServalBatPhoneApplication extends Application {
 							"%02x:%02x:%02x:%02x:%02x:%02x", bytes[0],
 							bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]) });
 
+			Rhizome.setRhizomeEnabled();
+
+			// attempt to import our own bundle into rhizome.
+			if (ServalD.isRhizomeEnabled() && ourApk != null) {
+				try {
+					RhizomeManifestResult result = ServalD.rhizomeImportBundle(
+							ourApk, ourApk);
+					preferenceEditor.putString("installed_manifest_id",
+							result.manifestId.toHex());
+					preferenceEditor.putLong("installed_manifest_version",
+							result.version);
+				} catch (Exception e) {
+					preferenceEditor.remove("installed_manifest_id");
+					preferenceEditor.remove("installed_manifest_version");
+					Log.v("BatPhone", e.getMessage(), e);
+				}
+			}
+
+			// remove legacy ssid preference value
+			// (and hope that doesn't annoy anyone)
+			String ssid_pref = settings.getString("ssidpref", null);
+			if (ssid_pref != null && "Mesh".equals(ssid_pref))
+				preferenceEditor.remove("ssidpref");
+
 			preferenceEditor.putString("lannetworkpref", ipaddr);
 			preferenceEditor.putString("lastInstalled", version + " "
 					+ lastModified);
+
 			preferenceEditor.commit();
 
-			Rhizome.setRhizomeEnabled();
 			setState(State.Off);
 
 		}catch(Exception e){

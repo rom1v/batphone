@@ -34,19 +34,19 @@ import org.servalproject.meshms.SimpleMeshMS;
 import org.servalproject.provider.RhizomeProvider;
 import org.servalproject.rhizome.RhizomeManifest.MissingField;
 import org.servalproject.rhizome.RhizomeMessageLogEntry.TooLongException;
+import org.servalproject.servald.AbstractId.InvalidBinaryException;
 import org.servalproject.servald.BundleId;
 import org.servalproject.servald.FileHash;
 import org.servalproject.servald.Identity;
 import org.servalproject.servald.ServalD;
 import org.servalproject.servald.ServalD.RhizomeAddFileResult;
 import org.servalproject.servald.ServalD.RhizomeExtractFileResult;
-import org.servalproject.servald.ServalD.RhizomeExtractManifestResult;
-import org.servalproject.servald.ServalD.RhizomeListResult;
 import org.servalproject.servald.ServalDFailureException;
 import org.servalproject.servald.ServalDInterfaceError;
 import org.servalproject.servald.SubscriberId;
 
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.util.Log;
 import android.webkit.MimeTypeMap;
@@ -54,7 +54,7 @@ import android.webkit.MimeTypeMap;
 public class Rhizome {
 
 	/** TAG for debugging */
-	public static final String TAG = "R3";
+	public static final String TAG = "Rhizome";
 
 	public static final String ACTION_RECEIVE_FILE = "org.servalproject.rhizome.RECEIVE_FILE";
 	public static final String RECEIVE_PERMISSION = "org.servalproject.rhizome.RECEIVE_FILE";
@@ -76,17 +76,15 @@ public class Rhizome {
 		File manifestFile = null;
 		File payloadFile = null;
 		try {
-			RhizomeListResult found = ServalD.rhizomeList(RhizomeManifest_MeshMS.SERVICE, sender, recipient, -1, -1);
+			Cursor messageLogs = ServalD.rhizomeList(
+					RhizomeManifest_MeshMS.SERVICE, null, sender, recipient);
 			BundleId manifestId = null;
-			if (found.list.length != 0) {
+			if (messageLogs.moveToNext()) {
 				try {
-					manifestId = new BundleId(found.list[0][found.columns.get("id")]);
-				}
-				catch (NullPointerException e) {
-					throw new ServalDInterfaceError("missing 'id' column", found);
-				}
-				catch (BundleId.InvalidHexException e) {
-					throw new ServalDInterfaceError("invalid 'id' column", found, e);
+					manifestId = new BundleId(messageLogs.getBlob(messageLogs
+							.getColumnIndexOrThrow("id")));
+				} catch (Exception e) {
+					throw new ServalDInterfaceError(e.getMessage(), e);
 				}
 			}
 			File dir = getMeshmsStageDirectoryCreated();
@@ -215,15 +213,16 @@ public class Rhizome {
 			throws ServalDFailureException,
 			ServalDInterfaceError, RhizomeManifestParseException, IOException,
 			RhizomeManifestSizeException, RhizomeManifestServiceException,
-			MissingField {
+			MissingField, InvalidBinaryException {
 
-		RhizomeListResult result = ServalD.rhizomeList(
-				RhizomeManifest_MeshMS.SERVICE, null,
-				destSid, -1, -1);
+		Cursor c = ServalD.rhizomeList(
+				RhizomeManifest_MeshMS.SERVICE, null, null,
+				destSid);
+		int key = c.getColumnIndexOrThrow("id");
 
-		for (int i = 0; i != result.list.length; ++i) {
-			RhizomeManifest_MeshMS manifest = (RhizomeManifest_MeshMS) result.toManifest(i);
-			manifest = (RhizomeManifest_MeshMS) readManifest(manifest.getManifestId());
+		while (c.moveToNext()) {
+			BundleId bid = new BundleId(c.getBlob(key));
+			RhizomeManifest_MeshMS manifest = (RhizomeManifest_MeshMS) readManifest(bid);
 			receiveMessageLog(manifest);
 		}
 	}
@@ -231,7 +230,7 @@ public class Rhizome {
 	public static void readMessageLogs() throws ServalDFailureException,
 			ServalDInterfaceError, RhizomeManifestParseException, IOException,
 			RhizomeManifestSizeException, RhizomeManifestServiceException,
-			MissingField {
+			MissingField, InvalidBinaryException {
 		Identity main = Identity.getMainIdentity();
 		if (main != null) {
 			readMessageLogs(main.sid);
@@ -294,9 +293,9 @@ public class Rhizome {
 			BundleId outgoingManifestId = null;
 			RhizomeAck latestOutgoingAck = null;
 
-			RhizomeListResult found = ServalD.rhizomeList(
-					RhizomeManifest_MeshMS.SERVICE,
-					self.sid, sender, -1, -1);
+			Cursor mesageLogs = ServalD.rhizomeList(
+					RhizomeManifest_MeshMS.SERVICE, null,
+					self.sid, sender);
 			long lastAckMessageTime = 0;
 
 			// look at all possible outgoing logs, trying to find the last ack
@@ -304,12 +303,13 @@ public class Rhizome {
 			// In an ideal world we wouldn't have multiple logs, but something
 			// is going wrong somewhere.
 			// TODO, consider pruning any manifests that we ignored
-			for (int i = 0; i < found.list.length; i++) {
+			int key_column = mesageLogs.getColumnIndex("id");
+			while (mesageLogs.moveToNext()) {
 				File testManifestFile = null;
 				File testPayloadFile = null;
 				try {
 					BundleId testManifestId = new BundleId(
-							found.list[i][found.columns.get("id")]);
+							mesageLogs.getBlob(key_column));
 					testManifestFile = File.createTempFile("outgoing", ".manifest", dir);
 					testPayloadFile = File.createTempFile("outgoing", ".payload", dir);
 					// Extract the outgoing manifest and payload files.
@@ -351,7 +351,7 @@ public class Rhizome {
 					}
 				}
 				catch (Exception e) {
-					throw new ServalDInterfaceError(e.getMessage(), found, e);
+					throw new ServalDInterfaceError(e.getMessage(), e);
 				}
 				finally {
 					// delete payload before manifest
@@ -757,84 +757,46 @@ public class Rhizome {
 		return ServalD.rhizomeExtractManifest(bid, null).manifest;
 	}
 
-	/** Extract a manifest and its payload (a "bundle") from the rhizome database.  Stores them
-	 * in a pair of files in the rhizome "saved" directory, overwriting any files that may
-	 * already be there with the same name.  The "saved" directory is created if it does not yet
-	 * exist.
+	/**
+	 * Extract a manifest and its payload (a "bundle") from the rhizome
+	 * database. Stores them in a pair of files in the rhizome "saved"
+	 * directory, overwriting any files that may already be there with the same
+	 * name. The "saved" directory is created if it does not yet exist.
 	 *
-	 * @param manifestId	The manifest ID of the bundle to extract
-	 * @param name			The basename to give the payload file in the "saved" directory.
+	 * @param manifestId
+	 *            The manifest ID of the bundle to extract
+	 * @param name
+	 *            The basename to give the payload file in the "saved"
+	 *            directory.
 	 *
 	 * @author Andrew Bettison <andrew@servalproject.com>
+	 * @throws IOException
+	 * @throws ServalDInterfaceError
+	 * @throws ServalDFailureException
 	 */
-	public static boolean extractFile(BundleId manifestId, String name) {
-		try {
-			Rhizome.getSaveDirectoryCreated(); // create the directory
-			File savedPayloadFile = savedPayloadFileFromName(name);
-			File savedManifestFile = savedManifestFileFromName(name);
-			// A manifest file without a payload file is ok, but not vice versa.  So always
-			// delete manifest files last and create them first.
-			savedPayloadFile.delete();
-			savedManifestFile.delete();
-			boolean done = false;
-			try {
-				done = extractBundle(manifestId, savedManifestFile, savedPayloadFile);
-			}
-			finally {
-				if (!done) {
-					safeDelete(savedPayloadFile); // delete payload before manifest
-					safeDelete(savedManifestFile);
-				}
-			}
-			return done;
-		}
-		catch (ServalDFailureException e) {
-			Log.e(Rhizome.TAG, "servald failed", e);
-		}
-		catch (ServalDInterfaceError e) {
-			Log.e(Rhizome.TAG, "servald interface is broken", e);
-		}
-		catch (RhizomeManifestSizeException e) {
-			Log.e(Rhizome.TAG, "manifest too big", e);
-		}
-		catch (IOException e) {
-			Log.e(Rhizome.TAG, "cannot save manifestId=" + manifestId + ", name=" + name, e);
-		}
-		return false;
-	}
+	public static void extractFile(BundleId manifestId, String name)
+			throws IOException, ServalDFailureException, ServalDInterfaceError {
+		Rhizome.getSaveDirectoryCreated(); // create the directory
+		File savedPayloadFile = savedPayloadFileFromName(name);
+		File savedManifestFile = savedManifestFileFromName(name);
+		// A manifest file without a payload file is ok, but not vice versa. So
+		// always
+		// delete manifest files last and create them first.
+		savedPayloadFile.delete();
+		savedManifestFile.delete();
 
-	/** Predicate for deciding whether a given bundle is visible.
-	 *
-	 * Bundles for services other than "file" are hidden, eg, MeshMS.
-	 *
-	 * File bundles with names starting with "." are hidden.  File bundles missing a name are
-	 * hidden.
-	 *
-	 * Kludge: file bundles generated by Serval Maps (well known name prefix/suffix) are also
-	 * hidden.  TODO: replace this mechanism with one based on mime type.
-	 *
-	 * @author Andrew Bettison <andrew@servalproject.com>
-	 */
-	public static boolean isVisible(RhizomeManifest manifest) {
-		if (manifest instanceof RhizomeManifest_File) {
-			RhizomeManifest_File fm = (RhizomeManifest_File) manifest;
-			try {
-				if (fm.getName().startsWith("."))
-					return false;
-				// TODO: replace following tests with mime-type test, once manifest carries
-				// mime type information.
-				if (fm.getName().endsWith(".smapp") || fm.getName().endsWith(".smapl"))
-					return false;
-				if (fm.getName().startsWith("smaps-photo-"))
-					return false;
-				return true;
-			}
-			catch (RhizomeManifest.MissingField e) {
-				// File bundles with no name are hidden.
-				return false;
-			}
+		try {
+			ServalD.rhizomeExtractManifestFile(manifestId, savedManifestFile,
+					savedPayloadFile);
+		} catch (ServalDFailureException e) {
+			safeDelete(savedPayloadFile);
+			safeDelete(savedManifestFile);
+			throw e;
+		} catch (ServalDInterfaceError e) {
+			safeDelete(savedPayloadFile);
+			safeDelete(savedManifestFile);
+			throw e;
 		}
-		return false;
 	}
 
 	/**
@@ -875,33 +837,6 @@ public class Rhizome {
 	public static File savedManifestFileFromName(String name)
 			throws FileNotFoundException {
 		return new File(Rhizome.getSaveDirectory(), ".manifest." + savedPayloadFileFromName(name).getName());
-	}
-
-	/** Helper function for extracting a manifest and its payload file.
-	 * Return true if the payload could be extracted, false if not (eg, because it is zero
-	 * size).
-	 *
-	 * @author Andrew Bettison <andrew@servalproject.com>
-	 */
-	protected static boolean extractBundle(BundleId manifestId, File manifestFile, File payloadFile)
-		throws RhizomeManifestSizeException, ServalDFailureException, ServalDInterfaceError
-	{
-		if (manifestFile.length() > RhizomeManifest.MAX_MANIFEST_BYTES)
-			throw new RhizomeManifestSizeException(manifestFile, RhizomeManifest.MAX_MANIFEST_BYTES);
-		RhizomeExtractManifestResult mres = ServalD.rhizomeExtractManifest(manifestId, manifestFile);
-		if (mres.fileSize == 0)
-			return false;
-		RhizomeExtractFileResult fres = extractPayload(manifestId, payloadFile);
-		if (mres.fileSize != fres.fileSize) {
-			Log.w(Rhizome.TAG, "extracted file lengths differ: mres.fileSize=" + mres.fileSize + ", fres.fileSize=" + fres.fileSize);
-			return false;
-		}
-		if (!mres.fileHash.equals(fres.fileHash)) {
-			Log.w(Rhizome.TAG, "extracted file hash differ: mres.fileHash="
-					+ mres.fileHash + ", fres.fileHash=" + fres.fileHash);
-			return false;
-		}
-		return true;
 	}
 
 	/** Helper function for extracting the payload for a given manifest.
@@ -1016,7 +951,7 @@ public class Rhizome {
 								.getMimeTypeFromExtension(ext);
 
 						mBroadcastIntent.setDataAndType(Uri.parse("content://"
-								+ RhizomeProvider.AUTHORITY + "/"
+										+ RhizomeProvider.AUTHORITY + "/"
 								+ file.getManifestId().toHex()), contentType);
 
 						mBroadcastIntent.putExtras(file.asBundle());
@@ -1024,10 +959,36 @@ public class Rhizome {
 						ServalBatPhoneApplication.context.sendBroadcast(
 								mBroadcastIntent,
 								RECEIVE_PERMISSION);
+
+						testUpgrade(file);
 					}
 				}
 			} catch (Exception e) {
 				Log.e(TAG, e.getMessage(), e);
+			}
+		}
+
+		private void testUpgrade(RhizomeManifest_File file) {
+			try {
+				ServalBatPhoneApplication app = ServalBatPhoneApplication.context;
+
+				String sBundleId = app.settings
+						.getString("installed_manifest_id", null);
+				if (sBundleId == null)
+					return;
+				BundleId installedBundleId = new BundleId(sBundleId);
+				if (!file.mManifestId.equals(installedBundleId))
+					return;
+
+				long installedVersion = app.settings
+						.getLong("installed_manifest_version", -1);
+				if (file.mVersion <= installedVersion)
+					return;
+
+				app.notifySoftwareUpdate(file.mManifestId);
+
+			} catch (Exception e) {
+				Log.v(TAG, e.getMessage(), e);
 			}
 		}
 	}

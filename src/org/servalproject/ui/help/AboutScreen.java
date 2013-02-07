@@ -20,25 +20,29 @@ package org.servalproject.ui.help;
 
 import org.servalproject.R;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 
 /**
- * help screens - main interface guide
+ * help screens - about Serval
+ *
+ * @author Romana Challans <romana@servalproject.org>
  */
 
-public class AboutScreen extends Activity {
+/*
+ * Help system now embedded HTML
+ */
 
+public class AboutScreen extends HtmlHelp {
+	/** Called when the activity is first created. */
 	@Override
-	public void onCreate(Bundle savedInstanceState)
-	{
+	public void onCreate(Bundle savedInstanceState) {
+		viewId = R.layout.aboutview;
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.aboutview);
 
-		// Donate Screen
+		// Get thee hence to the Donate Screen
 		Button btnDonate = (Button) this.findViewById(R.id.btnDonate);
 		btnDonate.setOnClickListener(new View.OnClickListener() {
 			@Override

@@ -52,12 +52,11 @@ public class PeerListService {
 			super(SubscriberId.broadcastSid());
 			contactId = Long.MAX_VALUE;
 			did = "*";
-			// TODO string constant...
 			name = "Broadcast/Everyone";
 			setContactName(name);
 			cacheUntil = Long.MAX_VALUE;
-			lastSeen = Long.MAX_VALUE;
-			reachable = true;
+			lastSeen = 0;
+			reachable = false;
 		}
 
 		@Override
@@ -67,7 +66,7 @@ public class PeerListService {
 		}
 	}
 
-	public static final BroadcastPeer broadcast = new BroadcastPeer();
+	public static final Peer broadcast = new BroadcastPeer();
 	static {
 		clear();
 	}
