@@ -230,7 +230,7 @@ public class MeshPacket {
 	}
 
 	/**
-	 * Returns the length of the data to be sent or the offset of the data received.
+	 * Returns the length of the data to be sent or the length of the data received.
 	 * 
 	 * @return data length.
 	 */
