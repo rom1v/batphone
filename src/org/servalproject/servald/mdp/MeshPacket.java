@@ -11,6 +11,22 @@ import org.servalproject.servald.SubscriberId;
  */
 public class MeshPacket {
 
+	/* QoS flags copied from constants.h */
+	public static final int OQ_ISOCHRONOUS_VOICE = 0;
+	public static final int OQ_MESH_MANAGEMENT = 1;
+	public static final int OQ_ISOCHRONOUS_VIDEO = 2;
+	public static final int OQ_ORDINARY = 3;
+	public static final int OQ_OPPORTUNISTIC = 4;
+	public static final int OQ_MAX = 5;
+
+	/* MDP flags copied from constants.h */
+	public static final int FLAG_MDP_FORCE = 1 << 8;
+	public static final int FLAG_MDP_NOCRYPT = 1 << 9;
+	public static final int FLAG_MDP_NOSIGN = 1 << 10;
+
+	/** Flag mask for {@code mdpTypeAndFlag} field. */
+	private static final int FLAG_MASK = 0xff00;
+
 	/** Data buffer. */
 	private byte[] buf;
 
@@ -25,6 +41,12 @@ public class MeshPacket {
 
 	/** Port. */
 	private int port = -1;
+
+	/** Flags. */
+	private int flags;
+
+	/** QoS type. */
+	private int qos = OQ_ORDINARY;
 
 	/**
 	 * Constructs a mesh packet for receiving packets of length {@code length} with offset
@@ -211,6 +233,46 @@ public class MeshPacket {
 	}
 
 	/**
+	 * Set the flags.
+	 * 
+	 * @param flags
+	 *            flags.
+	 */
+	public synchronized void setFlags(int flags) {
+		this.flags = flags & FLAG_MASK;
+	}
+
+	/**
+	 * Add the flags.
+	 * 
+	 * @param flags
+	 *            flags.
+	 */
+	public synchronized void addFlags(int flags) {
+		this.flags |= flags & FLAG_MASK;
+	}
+
+	/**
+	 * Remove the flags.
+	 * 
+	 * @param flags
+	 *            flags.
+	 */
+	public synchronized void removeFlag(int flags) {
+		this.flags &= ~(flags & FLAG_MASK);
+	}
+
+	/**
+	 * Set the QoS type.
+	 * 
+	 * @param qos
+	 *            QoS.
+	 */
+	public synchronized void setQos(int qos) {
+		this.qos = qos;
+	}
+
+	/**
 	 * Returns the data buffer. The data received or the data to be sent starts from the offset in
 	 * the buffer, and runs for length long.
 	 * 
@@ -256,6 +318,24 @@ public class MeshPacket {
 	 */
 	public synchronized int getPort() {
 		return port;
+	}
+
+	/**
+	 * Returns the flags.
+	 * 
+	 * @return Flags.
+	 */
+	public synchronized int getFlags() {
+		return flags;
+	}
+
+	/**
+	 * Return the QoS type.
+	 * 
+	 * @return QoS.
+	 */
+	public synchronized int getQos() {
+		return qos;
 	}
 
 }
