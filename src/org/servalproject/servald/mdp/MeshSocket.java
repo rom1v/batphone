@@ -50,6 +50,9 @@ public class MeshSocket {
 	/** Port */
 	private int port;
 
+	/** Lock for closing socket. */
+	private final Object closeLock = new Object();
+
 	/**
 	 * Constructs a mesh socket and binds it to any available port on the local host machine. The
 	 * socket will be bound to the wildcard address.
@@ -125,8 +128,10 @@ public class MeshSocket {
 	 * 
 	 * @return {@code true} if the socket has been closed, {@code false} otherwise.
 	 */
-	public synchronized boolean isClosed() {
-		return closed;
+	public boolean isClosed() {
+		synchronized (closeLock) {
+			return closed;
+		}
 	}
 
 	/**
@@ -211,9 +216,11 @@ public class MeshSocket {
 	 * Any thread currently blocked in {@link #receive(MeshPacket)} upon this socket will throw a
 	 * {@link MeshSocketException}. <strong>TODO not yet implemented</strong>
 	 */
-	public synchronized void close() {
-		closed = true;
-		_close();
+	public void close() {
+		synchronized (closeLock) {
+			closed = true;
+			_close();
+		}
 	}
 
 	private native static void init();
