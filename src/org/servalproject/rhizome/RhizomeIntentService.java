@@ -139,14 +139,14 @@ public class RhizomeIntentService extends IntentService {
 			}
 
 			RhizomeAddFileResult result = ServalD.rhizomeAddFile(mPayloadFile,
-					mManifestFile, Identity.getMainIdentity().sid, null);
+					mManifestFile, Identity.getMainIdentity().subscriberId, null);
 
 			mManifest = intent.getStringExtra("save_manifest");
 			if (mManifest != null) {
 				// save the new manifest here, so the caller can use it to
 				// update a file
 				mManifestFile = new File(mManifest);
-				ServalD.rhizomeExtractManifest(result.manifestId, mManifestFile);
+				ServalD.rhizomeExportManifest(result.manifestId, mManifestFile);
 			}
 
 		} catch (Exception e) {

@@ -139,8 +139,8 @@ public class SetPhoneNumber extends Activity {
 						} catch (IllegalArgumentException e) {
 							app.displayToastMessage(e.getMessage());
 						} catch (Exception e) {
-							Log.e("BatPhone", e.toString(), e);
-							app.displayToastMessage(e.toString());
+							Log.e("BatPhone", e.getMessage(), e);
+							app.displayToastMessage(e.getMessage());
 						}
 						return false;
 					}
@@ -224,7 +224,7 @@ public class SetPhoneNumber extends Activity {
 			existingNumber = mTelephonyMgr.getLine1Number();
 		}
 
-		sid.setText(identity.sid.abbreviation());
+		sid.setText(identity.subscriberId.abbreviation());
 		number.setText(existingNumber);
 		name.setText(existingName);
 	}

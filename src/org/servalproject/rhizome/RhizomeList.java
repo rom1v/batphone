@@ -124,8 +124,7 @@ public class RhizomeList extends ListActivity {
 	 */
 	private void listFiles() {
 		try {
-			Cursor c = ServalD.rhizomeList(RhizomeManifest_File.SERVICE, null,
-					null, null);
+			Cursor c = ServalD.rhizomeList(RhizomeManifest_File.SERVICE, null, null, null);
 			// hack to hide Serval Maps files from the list.
 			c = new FilteredCursor(c);
 			adapter = new SimpleCursorAdapter(this, R.layout.rhizome_list_item,
@@ -169,7 +168,7 @@ public class RhizomeList extends ListActivity {
 
 				BundleId bid = new BundleId(c.getBlob(c.getColumnIndex("id")));
 				RhizomeExtractManifestResult result = ServalD
-						.rhizomeExtractManifest(bid, null);
+						.rhizomeExportManifest(bid, null);
 				detail.setManifest(result.manifest);
 				detail.enableSaveOrOpenButton();
 				detail.disableUnshareButton();
