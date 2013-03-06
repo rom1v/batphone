@@ -38,7 +38,7 @@ public class MeshSocketAddress {
 	 *            Port.
 	 */
 	public MeshSocketAddress(int port) {
-		this(Identity.getMainIdentity().sid, port);
+		this(Identity.getMainIdentity().subscriberId, port);
 	}
 
 	/**
