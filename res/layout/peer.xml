@@ -11,8 +11,14 @@
         android:layout_toLeftOf="@+id/call"
         android:padding="4dp"
         android:textAppearance="?android:attr/textAppearanceLarge" />
-    
-    
+
+    <CheckBox
+        android:id="@+id/selectButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_toLeftOf="@+id/call"
+        android:padding="4dp" />
+
     <ImageView
         android:id="@+id/call"
         android:layout_width="wrap_content"

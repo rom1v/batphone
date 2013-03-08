@@ -35,6 +35,8 @@ import org.servalproject.servald.PeerComparator;
 import org.servalproject.servald.PeerListService;
 import org.servalproject.servald.ServalD;
 import org.servalproject.servald.SubscriberId;
+import org.servalproject.servald.mdp.MeshSocketAddress;
+import org.servalproject.walkietalkie.WalkieTalkieService;
 
 import android.app.Activity;
 import android.app.ListActivity;
@@ -44,9 +46,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.OnTouchListener;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
+import android.widget.Button;
 import android.widget.ListView;
 
 /**
@@ -79,9 +84,29 @@ public class PeerList extends ListActivity {
 	List<IPeer> peers = new ArrayList<IPeer>();
 	private Handler handler;
 
+	private Button talkButton;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		setContentView(R.layout.peer_list);
+
+		talkButton = (Button) findViewById(R.id.talk_button);
+		talkButton.setOnTouchListener(new OnTouchListener() {
+
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				switch (event.getAction()) {
+				case MotionEvent.ACTION_DOWN:
+					WalkieTalkieService.startSpeaking(PeerList.this, getSelectedRecipients());
+					break;
+				case MotionEvent.ACTION_UP:
+					WalkieTalkieService.stopSpeaking(PeerList.this);
+					break;
+				}
+				return false;
+			}
+		});
 
 		handler = new Handler();
 		Intent intent = getIntent();
@@ -223,6 +248,7 @@ public class PeerList extends ListActivity {
 		displayed = false;
 		unresolved.clear();
 		peers.clear();
+		WalkieTalkieService.stopListening(this);
 	}
 
 	public void monitorConnected() {
@@ -296,6 +322,22 @@ public class PeerList extends ListActivity {
 			}
 
 		}.execute();
+
+		WalkieTalkieService.startListening(this);
+	}
+
+	private static final int WALKIE_TALKIE_SERVER_PORT = WalkieTalkieService.WALKIE_TALKIE_SERVER_PORT;
+
+	private MeshSocketAddress[] getSelectedRecipients() {
+		List<SubscriberId> sids = listAdapter.getSelectedSids();
+		int len = sids.size();
+		MeshSocketAddress[] recipients = new MeshSocketAddress[len];
+		for (int i = 0 ; i < len; i++) {
+			SubscriberId sid = sids.get(i);
+			/* All recipients use the same server port */
+			recipients[i] = new MeshSocketAddress(sid, WALKIE_TALKIE_SERVER_PORT);
+		}
+		return recipients;
 	}
 
 }

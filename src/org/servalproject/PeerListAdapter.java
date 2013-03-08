@@ -28,10 +28,14 @@ package org.servalproject;
  *         When a peer is received from the service this activity will attempt
  *         to resolve the peer by calling ServalD in an async task.
  */
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.servalproject.messages.ShowConversationActivity;
 import org.servalproject.servald.IPeer;
+import org.servalproject.servald.SubscriberId;
 
 import android.content.Context;
 import android.content.Intent;
@@ -41,9 +45,15 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.TextView;
 
 public class PeerListAdapter extends ArrayAdapter<IPeer> {
+
+	private final Set<SubscriberId> selected = new HashSet<SubscriberId>();
+
 	public PeerListAdapter(Context context, List<IPeer> peers) {
 		super(context, R.layout.peer, R.id.Name, peers);
 	}
@@ -51,7 +61,7 @@ public class PeerListAdapter extends ArrayAdapter<IPeer> {
 	@Override
 	public View getView(final int position, View convertView, ViewGroup parent) {
 		View ret = super.getView(position, convertView, parent);
-		IPeer p = this.getItem(position);
+		final IPeer p = this.getItem(position);
 
 		TextView displaySid = (TextView) ret.findViewById(R.id.sid);
 		displaySid.setText(p.getSubscriberId().abbreviation());
@@ -112,7 +122,35 @@ public class PeerListAdapter extends ArrayAdapter<IPeer> {
 			});
 		}
 
+		CheckBox selectButton = (CheckBox) ret.findViewById(R.id.selectButton);
+		boolean isSelected = selected.contains(p.getSubscriberId());
+		selectButton.setChecked(isSelected);
+		selectButton.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+
+			@Override
+			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+				SubscriberId sid = p.getSubscriberId();
+				if (isChecked) {
+					selected.add(sid);
+				} else {
+					selected.remove(sid);
+				}
+			}
+		});
+
 		return ret;
+	}
+
+	List<SubscriberId> getSelectedSids() {
+		List<SubscriberId> sids = new ArrayList<SubscriberId>();
+		int len = getCount();
+		for (int i = 0; i < len; i++) {
+			SubscriberId sid = getItem(i).getSubscriberId();
+			if (selected.contains(sid)) {
+				sids.add(sid);
+			}
+		}
+		return sids;
 	}
 
 }
