@@ -253,6 +253,15 @@
 				android:resource="@xml/contacts" />
 	    </service>
 	    
+	    <service android:name=".walkietalkie.WalkieTalkieService" android:exported="false">
+	        <intent-filter>
+                <action android:name="org.servalproject.walkietalkie.START_SPEAKING" />
+                <action android:name="org.servalproject.walkietalkie.STOP_SPEAKING" />
+                <action android:name="org.servalproject.walkietalkie.START_LISTENING" />
+                <action android:name="org.servalproject.walkietalkie.STOP_LISTENING" />
+            </intent-filter>
+	    </service>
+	    
 	    <activity android:launchMode="singleTop"
 	         android:name="WifiJammedActivity"></activity>
 
