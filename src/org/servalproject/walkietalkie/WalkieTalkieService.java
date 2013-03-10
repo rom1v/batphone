@@ -48,6 +48,9 @@ public class WalkieTalkieService extends Service {
 	/** Mesh socket client port for walkie-talkie communication. */
 	public static final int WALKIE_TALKIE_CLIENT_PORT = 5555;
 
+	/** Debug traces make the audio stream jerky. */
+	public static final boolean DEBUG_WALKIE_TALKIE = false;
+
 	private AudioSender sender;
 	private AudioReceiver receiver;
 

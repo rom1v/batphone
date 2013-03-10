@@ -119,7 +119,6 @@ public class Mixer {
 			sourceIndex = getSourceIndex(ssrc);
 		}
 		Source source;
-		Log.i(TAG, "sourceIndex[" + ssrc + "] = " + sourceIndex);
 		if (sourceIndex == -1) {
 			source = new Source(ssrc, sampleOffset);
 			sources.add(source);
@@ -134,7 +133,9 @@ public class Mixer {
 
 	public synchronized int write(int ssrc, int sampleOffset, byte[] data, int dataOffset,
 			int dataLength) {
-		Log.i(TAG, "write(ssrc=" + ssrc + ", sampleOffset=" + sampleOffset + ", ...)");
+		if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+			Log.d(TAG, "write(ssrc=" + ssrc + ", sampleOffset=" + sampleOffset + ", ...)");
+		}
 		Source source = createSource(ssrc, sampleOffset - delayInSamples);
 		source.touch();
 		return source.streamBuffer.write(2 * sampleOffset, data, dataOffset, dataLength);
@@ -170,7 +171,7 @@ public class Mixer {
 			int msToEat = (int) (now - target);
 			int samplesToEat = toSamples(msToEat, rate);
 			move(2 * samplesToEat);
-			Log.i(TAG, "Playing lag: eat " + msToEat + " ms (" + samplesToEat + " samples)");
+			Log.w(TAG, "Playing lag: eat " + msToEat + " ms (" + samplesToEat + " samples)");
 		}
 
 		dataLength &= ~1; /* make dataLength even */

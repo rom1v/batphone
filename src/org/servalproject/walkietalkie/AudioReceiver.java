@@ -147,14 +147,17 @@ public class AudioReceiver {
 								| (buf[4] & 0xff) << 8 | buf[5] & 0xff;
 						int ssrc = (buf[6] & 0xff) << 24 | (buf[7] & 0xff) << 16
 								| (buf[8] & 0xff) << 8 | buf[9] & 0xff;
-						Log.i(TAG, "ssrc=" + ssrc + ", " + buf[6] + ":" + buf[7] + ":" + buf[8]
-								+ ":" + buf[9]);
 
 						int writeBufLength = decompress(buf, writeBuf, HEADER_SIZE,
 								packet.getLength() - HEADER_SIZE);
 						int written = mixer.write(ssrc, timestamp, writeBuf, 0, writeBufLength);
-						Log.i(TAG, "(" + ssrc + ") Packet " + seq + "[" + packet.getBuf().length
-								+ "] " + written);
+
+						if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+							Log.d(TAG, "ssrc=" + ssrc + ", " + buf[6] + ":" + buf[7] + ":" + buf[8]
+									+ ":" + buf[9]);
+							Log.d(TAG, "(" + ssrc + ") Packet " + seq + "["
+									+ packet.getBuf().length + "] " + written);
+						}
 
 					} catch (IOException e) {
 						if (!stopped) {
@@ -209,8 +212,10 @@ public class AudioReceiver {
 							return;
 						}
 
-						Log.i(TAG, "mixerPlayer.read() : " + SystemClock.elapsedRealtime() + " ["
-								+ read + "]");
+						if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+							Log.d(TAG, "mixerPlayer.read() : " + SystemClock.elapsedRealtime()
+									+ " [" + read + "]");
+						}
 						mixer.move(read);
 					}
 					audioTrack.write(buf, 0, read);

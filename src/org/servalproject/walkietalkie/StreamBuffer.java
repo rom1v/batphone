@@ -33,15 +33,14 @@ public class StreamBuffer {
 	public synchronized int write(int streamOffset, byte[] data, int dataOffset, int dataLength) {
 		int start = streamOffset - this.streamOffset;
 
-		Log.i("StreamBuffer", "--> " + (streamOffset - this.streamOffset));
 		if (start > length) {
-			Log.i("StreamBuffer", "Buffer overflow : " + this.streamOffset + " - " + streamOffset);
+			Log.w("StreamBuffer", "Buffer overflow : " + this.streamOffset + " - " + streamOffset);
 			/* buffer overflow (write too far on the right) */
 			return 0;
 		}
 
 		if (start < 0) {
-			Log.i("StreamBuffer", "Buffer underrun : " + this.streamOffset + " - " + streamOffset);
+			Log.w("StreamBuffer", "Buffer underrun : " + this.streamOffset + " - " + streamOffset);
 			/* buffer underrun (write too far on the left) */
 			dataOffset -= start;
 			dataLength += start;

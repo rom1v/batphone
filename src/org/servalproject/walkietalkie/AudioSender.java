@@ -140,7 +140,9 @@ public class AudioSender {
 				int fromStartTU = 0; /* in timestamp units (for example 1 TU = 1 sample = 2 bytes) */
 
 				while (!stopped) {
-					Log.i(TAG, "Reading packet " + seq);
+					if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+						Log.d(TAG, "Reading packet " + seq);
+					}
 
 					/* dynamic headers */
 					buf[0] = (byte) (seq >> 8);
@@ -163,12 +165,12 @@ public class AudioSender {
 						packet.setSid(to.getSid());
 						packet.setPort(to.getPort());
 						try {
-							Log.i(TAG, "Prepare packet " + seq + " [" + read / 2 + "] to send to "
-									+ to.getSid() + ":" + to.getPort());
 							socket.send(packet);
-							Log.i(TAG,
-									"Paquet " + seq + " sent to " + to.getSid() + ":"
-											+ to.getPort());
+							if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+								Log.d(TAG,
+										"Packet " + seq + " [" + read / 2 + " sent to "
+												+ to.getSid() + ":" + to.getPort());
+							}
 						} catch (IOException e) {
 							Log.e(TAG, "Cannot send data", e);
 						}
@@ -180,15 +182,18 @@ public class AudioSender {
 
 					if (Math.abs(fromStartTU - timestamp) > 1000) {
 						/*
-						 * micro does not record exactly at the right rate, we have to correct it
-						 * (here every 1k samples of deviation)
+						 * micro does not record exactly at the right rate on some phones, we have
+						 * to correct it (here every 1k samples of deviation)
 						 */
-						Log.i(TAG, "--MICROPHONE DEVIATION CORRECTION-- timestamp was " + timestamp
+						Log.w(TAG, "--MICROPHONE DEVIATION CORRECTION-- timestamp was " + timestamp
 								+ ", timestamp = " + fromStartTU);
 						timestamp = fromStartTU;
 					}
-					Log.i(TAG, "theoretical-timestamp(" + fromStartTU + ") - recorded-timestamp("
-							+ timestamp + ") = " + (fromStartTU - timestamp));
+					if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+						Log.d(TAG, "theoretical-timestamp(" + fromStartTU
+								+ ") - recorded-timestamp(" + timestamp + ") = "
+								+ (fromStartTU - timestamp));
+					}
 
 					seq++;
 					timestamp += read / 2; /* 2 bytes per sample */
