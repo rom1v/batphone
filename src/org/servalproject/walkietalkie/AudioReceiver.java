@@ -138,9 +138,11 @@ public class AudioReceiver {
 				byte[] writeBuf = new byte[COMPRESSION.ratio * PAYLOAD_SIZE];
 				MeshPacket packet = new MeshPacket(buf, PACKET_SIZE);
 
+				int consecutiveFails = 0;
 				while (!stopped) {
 					try {
 						socket.receive(packet);
+						consecutiveFails = 0;
 
 						int seq = (buf[0] & 0xff) << 8 | buf[1] & 0xff;
 						int timestamp = (buf[2] & 0xff) << 24 | (buf[3] & 0xff) << 16
@@ -162,13 +164,15 @@ public class AudioReceiver {
 					} catch (IOException e) {
 						if (!stopped) {
 							Log.e(TAG, "Cannot receive data", e);
+							/* something is definitely wrong */
+							if (++consecutiveFails > 3) {
+								stopped = true;
+							}
 						}
 					}
 				}
 			} catch (MeshSocketException e) {
 				Log.e(TAG, "Cannot create receiver socket", e);
-			} finally {
-
 			}
 		}
 	};
