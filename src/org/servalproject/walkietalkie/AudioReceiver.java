@@ -57,6 +57,7 @@ public class AudioReceiver {
 	}
 
 	public synchronized void start() {
+		stop();
 		Mixer mixer = new Mixer(RATE, BUFFER_MS, DELAY_IN_SAMPLES);
 
 		bufferizer = new Bufferizer(mixer);

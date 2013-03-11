@@ -53,6 +53,7 @@ public class AudioSender {
 	}
 
 	public synchronized void start(MeshSocketAddress... recipients) {
+		stop();
 		worker = new Worker(recipients);
 		future = workerExecutor.submit(worker);
 	}
