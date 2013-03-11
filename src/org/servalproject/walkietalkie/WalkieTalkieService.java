@@ -138,9 +138,7 @@ public class WalkieTalkieService extends Service {
 	}
 
 	private void stopSpeaking() {
-		if (sender != null) {
-			sender.stop();
-		}
+		sender.stop();
 		speakingAsked = false;
 	}
 
@@ -149,9 +147,7 @@ public class WalkieTalkieService extends Service {
 	}
 
 	private void stopListening() {
-		if (receiver != null) {
-			receiver.stop();
-		}
+		receiver.stop();
 		listeningAsked = false;
 	}
 
