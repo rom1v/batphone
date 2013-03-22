@@ -1,0 +1,4 @@
+exists /system/bin/ndc
+exists /system/etc/wifi/bcmdhd.cal
+capability Adhoc galaxynexus.adhoc.edify galaxynexus.off.edify
+nowirelessextensions

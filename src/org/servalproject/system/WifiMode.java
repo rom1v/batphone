@@ -22,11 +22,15 @@ package org.servalproject.system;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.Enumeration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.servalproject.ServalBatPhoneApplication;
 import org.servalproject.shell.CommandCapture;
 import org.servalproject.shell.Shell;
 
+import android.annotation.TargetApi;
+import android.os.Build;
 import android.util.Log;
 
 public enum WifiMode {
@@ -72,6 +76,7 @@ public enum WifiMode {
 		return getWiFiMode(null, interfaceName);
 	}
 
+	@TargetApi(Build.VERSION_CODES.GINGERBREAD)
 	public static WifiMode getWiFiMode(Shell rootShell, String interfaceName) {
 		NetworkInterface networkInterface = null;
 		lastIwconfigOutput = null;
@@ -83,12 +88,47 @@ public enum WifiMode {
 			// interface doesn't exist? must be off.
 			if (networkInterface == null)
 				return WifiMode.Off;
+
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD
+					&& !networkInterface.isUp()) {
+				/* With non-wext drivers, network type is kept even when network interface is down */
+				return WifiMode.Off;
+			}
 		} catch (Exception e) {
 			Log.e("BatPhone/WifiMode", e.toString(), e);
 		}
 
 		if (ChipsetDetection.getDetection().getWifiChipset()
 				.lacksWirelessExtensions()) {
+
+			/* maybe it works with "iw", let's try */
+			CoreTask coretask = ServalBatPhoneApplication.context.coretask;
+			CommandCapture c = new CommandCapture(coretask.DATA_FILE_PATH + "/bin/iw dev "
+					+ interfaceName + " info");
+			try {
+				if (rootShell == null) {
+					rootShell = Shell.startShell();
+				}
+				rootShell.run(c);
+				if (c.exitCode() == 0) {
+					Pattern iwTypePattern = Pattern.compile("type\\s(\\w+)");
+					Matcher m = iwTypePattern.matcher(c.toString());
+					if (m.find()) {
+						String type = m.group(1).toLowerCase();
+						if ("managed".equals(type)) {
+							return WifiMode.Client;
+						}
+						if ("ibss".equals(type)) {
+							return WifiMode.Adhoc;
+						}
+						return WifiMode.Unknown;
+					}
+				}
+				/* fall through, try something else */
+			} catch (Exception e) {
+				Log.e("WifiMode", "Cannot execute iw", e);
+				/* fall through, try something else */
+			}
 
 			// We cannot use iwstatus, so see if our interface/IP is available.
 			// IP address is probably the safest option.
