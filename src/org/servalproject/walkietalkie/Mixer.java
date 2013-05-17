@@ -132,7 +132,7 @@ public class Mixer {
 			source = sources.get(sourceIndex);
 		}
 		if (wasEmpty) {
-			notify();
+			notifyAll();
 		}
 		return source;
 	}
@@ -170,18 +170,23 @@ public class Mixer {
 		/* wait for reading "at real time" */
 		long now = SystemClock.elapsedRealtime();
 		long target = origin + (cursor + dataLength / 2) * 1000 / rate;
-		if (target > now) {
-			try {
-				Thread.sleep(target - now);
-			} catch (InterruptedException e) {
-				return 0;
-			}
-		} else if (target < now - MAX_PLAYING_LAG) {
+
+		if (target < now - MAX_PLAYING_LAG) {
 			/* playing lag, eat bytes */
 			int msToEat = (int) (now - target);
 			int samplesToEat = toSamples(msToEat, rate);
 			move(2 * samplesToEat);
 			Log.w(TAG, "Playing lag: eat " + msToEat + " ms (" + samplesToEat + " samples)");
+		} else {
+			while (target > now) {
+				/* the wait() will wake up on notify(), so we have to wait() again */
+				try {
+					wait(target - now);
+					now = SystemClock.elapsedRealtime();
+				} catch (InterruptedException e) {
+					return 0;
+				}
+			}
 		}
 
 		dataLength &= ~1; /* make dataLength even */

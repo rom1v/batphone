@@ -226,7 +226,7 @@ public class AudioReceiver {
 							read = mixer.read(buf, 0, buf.length, true);
 						}
 
-						if (stopped || read == 0) {
+						if (stopped || read <= 0) {
 							return;
 						}
 
