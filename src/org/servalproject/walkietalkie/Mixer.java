@@ -21,6 +21,12 @@ public class Mixer {
 	private static final int BUFFER_MAX_IDLE_TIME = 600; /* ms without writes */
 	private static final int MAX_PLAYING_LAG = 50; /* ms */
 
+	/**
+	 * Special value to be returned by {@link #read(byte[], int, int, boolean)
+	 * read(byte[], int, int, false)} when the mixer has no input sources.
+	 */
+	public static final int NO_INPUT = -1;
+
 	private int rate;
 	private int bufferMs;
 	private long origin; /* timestamp of cursor=0, in milliseconds */
@@ -141,11 +147,15 @@ public class Mixer {
 		return source.streamBuffer.write(2 * sampleOffset, data, dataOffset, dataLength);
 	}
 
-	public synchronized int read(byte[] data, int dataOffset, int dataLength) {
+	public synchronized int read(byte[] data, int dataOffset, int dataLength, boolean blockOnNoInput) {
 		removeOldSources();
 
 		/* blocking read() */
-		while (!closed && sources.size() == 0) {
+		while (!closed && sources.isEmpty()) {
+			/* if we don't block on no input, then we return a special value */
+			if (!blockOnNoInput) {
+				return NO_INPUT;
+			}
 			try {
 				wait();
 			} catch (InterruptedException e) {
@@ -226,6 +236,7 @@ public class Mixer {
 	}
 
 	public synchronized void close() {
+		sources.clear();
 		closed = true;
 		notifyAll();
 	}

@@ -185,6 +185,7 @@ public class AudioReceiver {
 		private AudioTrack audioTrack;
 
 		private volatile boolean stopped;
+		private boolean playing;
 
 		Player(Mixer mixer) {
 			this.mixer = mixer;
@@ -211,7 +212,19 @@ public class AudioReceiver {
 				while (!stopped) {
 					int read;
 					synchronized (mixer) {
-						read = mixer.read(buf, 0, buf.length);
+						if (playing) {
+							/* When playing, we must be aware that the Mixer has no input, to stop the audioTrack */
+							if ((read = mixer.read(buf, 0, buf.length, false)) == Mixer.NO_INPUT) {
+								if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+									Log.d(TAG, "Walkie-talkie: stop playing");
+								}
+								audioTrack.stop();
+								playing = false;
+								read = mixer.read(buf, 0, buf.length, true);
+							}
+						} else {
+							read = mixer.read(buf, 0, buf.length, true);
+						}
 
 						if (stopped || read == 0) {
 							return;
@@ -224,12 +237,23 @@ public class AudioReceiver {
 						mixer.move(read);
 					}
 					audioTrack.write(buf, 0, read);
-					/* play and stop after playing this packet (unless another call play() again) */
-					audioTrack.play();
-					audioTrack.stop();
+					if (!playing) {
+						if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+							Log.d(TAG, "Walkie-talkie: start playing");
+						}
+						audioTrack.play();
+						playing = true;
+					}
 				}
 			} finally {
 				if (audioTrack != null) {
+					if (playing) {
+						if (WalkieTalkieService.DEBUG_WALKIE_TALKIE) {
+							Log.d(TAG, "Walkie-talkie: stop playing");
+						}
+						audioTrack.stop();
+						playing = false;
+					}
 					audioTrack.release();
 				}
 			}
