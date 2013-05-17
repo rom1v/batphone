@@ -17,9 +17,9 @@ import android.util.Log;
 
 /**
  * Receive audio packets, bufferize and mix them, then play.
- * 
+ *
  * @author Romain Vimont (®om) <rom@rom1v.com>
- * 
+ *
  */
 public class AudioReceiver {
 
@@ -229,12 +229,12 @@ public class AudioReceiver {
 					audioTrack.stop();
 				}
 			} finally {
-				if (audioTrack == null) {
+				if (audioTrack != null) {
 					audioTrack.release();
 				}
 			}
 		}
-	};
+	}
 
 	private static int decompress(byte[] buf, byte[] writeBuf, int bufOffset, int bufPayloadLength) {
 		switch (COMPRESSION) {
