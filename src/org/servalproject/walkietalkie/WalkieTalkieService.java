@@ -25,7 +25,7 @@ public class WalkieTalkieService extends Service {
 	 * 
 	 * Parameters:
 	 * <ul>
-	 * <li>{@link EXTRA_RECIPIENTS}</li>
+	 * <li>{@link #EXTRA_RECIPIENTS}</li>
 	 * </ul>
 	 */
 	public static final String ACTION_START_SPEAKING = "org.servalproject.walkietalkie.START_SPEAKING";
@@ -39,7 +39,7 @@ public class WalkieTalkieService extends Service {
 	/** Stop listening action. */
 	public static final String ACTION_STOP_LISTENING = "org.servalproject.walkietalkie.STOP_LISTENING";
 
-	/** Value is {@link WalkieTalkieRecipient[]}. */
+	/** Value is {@link WalkieTalkieRecipient}[]. */
 	public static final String EXTRA_RECIPIENTS = "recipients";
 
 	/** Mesh socket server port for walkie-talkie communication. */
