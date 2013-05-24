@@ -90,10 +90,10 @@ public class MeshPacket {
 	 *            offset.
 	 * @param length
 	 *            length.
-	 * @param destination
-	 *            SID address.
-	 * @param destination
-	 *            port.
+	 * @param sid
+	 *            destination SID address.
+	 * @param port
+	 *            destination port.
 	 */
 	public MeshPacket(byte[] buf, int offset, int length, SubscriberId sid, int port) {
 		this(buf, offset, length);
@@ -110,10 +110,10 @@ public class MeshPacket {
 	 *            packet data.
 	 * @param length
 	 *            length.
-	 * @param destination
-	 *            SID address.
-	 * @param destination
-	 *            port.
+	 * @param sid
+	 *            destination SID address.
+	 * @param port
+	 *            destination port.
 	 */
 	public MeshPacket(byte[] buf, int length, SubscriberId sid, int port) {
 		this(buf, 0, length, sid, port);
