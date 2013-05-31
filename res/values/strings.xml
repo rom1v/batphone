@@ -29,20 +29,13 @@
     <string name="url">servalproject.org</string>
     <string name="warning1">EXPERIMENTAL</string>
     <string name="warning2">SOFTWARE</string>
-    <string name="affirm">YES</string> 
-    <string name="deny">NO</string>    
 	<string name="app_name">Serval Mesh</string>
 	<string name="agree">I agree</string>
 	<string name="cancel">Cancel</string>
-	<string name="wifiJammed">Wifi Issue</string>
 	
 	<!-- Serval Main -->
 	<!-- These must say Serval Mesh, not Serval Network, because Serval provides the protocol, not the infrastructure.
 	This has important implications for telecommunications law in various countries. -->
-    <string name="maincall">Make a call via the Serval Mesh</string> 
-    <string name="mainmsg">Send a message via the Serval Mesh</string>    
-	<string name="mainreset">Reset your phone number</string>
-	<string name="maintoggle">Suspend or start Serval services</string>
 	<string name="callLabel">Call</string>    
     <string name="messageLabel">Messages</string>    
     <string name="contactsLabel">Contacts</string>    
@@ -52,26 +45,20 @@
     <string name="settingsLabel">Settings</string>  
     <string name="powerLabel">Power</string>    
     <string name="helpLabel">Help</string>	
-    <string name="state_power_on">Switch OFF</string>
-    <string name="state_power_off">Switch ON</string>
+    <string name="state_power_on">Connect</string>
+    <string name="state_power_off">Connect</string>
     <string name="state_installing">Installing&#8230;</string>
     <string name="state_upgrading">Upgrading&#8230;</string>
-    <string name="state_starting">Starting&#8230;</string>
-    <string name="state_stopping">Stopping&#8230;</string>
+    <string name="state_starting">Connect</string>
+    <string name="state_stopping">Connect</string>
     <string name="state_broken">Broken!</string>
 
 	
 	<!-- Serval Buttons -->
 	<string name="btnwizard">SETUP WIZARD</string>
-	<string name="btnmsg">SEND A MESSAGE</string>
-	<string name="btncall">MAKE A CALL</string>
-	<string name="btnreset">RESET</string>
 	<string name="btnPhOk">OK</string>
-	<string name="btnok">OK</string>
-	<string name="btnac">Manage Account</string>
 	
 	<!-- Serval Phone Set -->
-	<string name="patience">Please wait&#8230;</string>
 	<string name="cancelcall">Cancel</string>
 	<string name="searchpeers">Search Peer List</string>
 	<string name="callcellular">Call via cellular network</string>
@@ -83,53 +70,15 @@
     
 	<!-- Serval About -->
 	<string name="aboutTitle">About</string>	
-	<string name="aboutUs">The Serval Project is a humanitarian effort to make mobile phones useful without cellular networks so that people have the best chance\n
-of communicating, without cost, wherever they are, and even when disaster strikes. Our work depends on donations and philanthropic support.</string> 
-	<string name="svisitUs">For more information, \n visit our website -</string>
-	<string name="saboutContact">You can contact us via email -</string>
 	<string name="emailEnquiries">enquiry@servalproject.org</string>  
-    <string name="splease_help">If you like this application, then please consider a donation.</string>
     
 	<!-- Serval Donations -->
 	<string name="donateTitle">Make a Donation</string>	
 	<string name="donateButton">Donate via PayPal</string>	
-	<string name="swhy_donate">By donating you provide support to continue development of this software.</string>
-    <string name="sthanks">Thank you!</string>
-    <string name="scontactUs">You can also contact us via the website -</string>
-    <string name="selseEmail">or via email -</string>
 	  
-	<!-- Serval Security -->
-    <string name="securityWarning">This version of the Serval Mesh Software contains improved security. 
-     \nWe are now using Elliptic Curve Cryptography, which means messages and calls can only be opened
-      by the device that has the right Serval ID (SID).
-     \nEnsuring the physical security of the device remains the responsibility of the user.</string>
-	<string name="securityFuture">Upcoming releases will contain improvements to security options.</string>
-	<string name="securityContact">For more information, feel free to contact us</string>
-
-       
     <!-- Serval Instruction -->
     <string name="setdetails">Set Name and Number</string>
-    <string name="sidLabel">Your unique Serval ID -</string>
-    <string name="instrtitle">Setup Instructions</string>
- 	<string name="instr1">You will be asked to enter a phone number.\n This can be any number you like, with these exceptions \:</string>
-    <string name="exception1">* It cannot start with \'11\'</string>
-    <string name="exception2">* It has to have 5 or more digits.</string> 
-    <string name="instr2">Once this has been done, press ok.\n You will be taken to the main screen.</string>
-    <string name="instrmenuhint">The menu can be accessed via your phones menu key.\n Please refer to your handsets instructions.</string> 
-    <string name="phoneInstr">Please enter your phone number \: \n remember, do not start it with \'11\', \nand it requires more than 5 digits.</string>
-    
-	<!-- Serval Controls -->
-    <string name="setuptext">Settings</string>
-    <string name="abouttext">About</string>
-    <string name="rhizometext">Rhizome</string>
-    <string name="logtext">Show Log</string>
-    <string name="redetecttext">Redetect WiFi</string>
-    <string name="reloadclientlisttext">Reload Client-List</string>
-    <string name="applywhitelisttext">Apply Settings</string>
-    <string name="installtext">(Re)-Install binaries/configs</string>
-    <string name="accesscontroltext">Access Control</string>
-    <string name="temperatureunit">°C</string>
-	<string name="paypalUrlServal">http://servalproject.org/</string>
+    <string name="phoneInstr">Please enter your phone number.\nIt cannot match an emergency number, \nand must be at least 5 digits long.</string>
 	      
 	<!-- Serval Security -->
     <string name="security_header">Serval Security</string>
@@ -144,4 +93,17 @@ of communicating, without cost, wherever they are, and even when disaster strike
 	    \nplease contact us at \n\n</string>
 
 	<string name="broadcast_meshms_message">Broadcast messages are sent to the whole network.</string>
+
+
+	<!--  Wifi setup / warnings -->
+	<string name="openhotspottitle">%1$s</string>
+	<string name="openhotspotmessage">Starting an open hotspot will allow other users to consume your cellular data and may cost you money.</string>
+	<string name="adhoctesttitle">Test adhoc control</string>
+	<string name="adhoctestmessage">Connecting to an adhoc network requires root access and may not work on this device.</string>
+	<string name="testbutton">Test</string>
+	<string name="adhocconnecttitle">%1$s</string>
+	<string name="adhocconnectmessage">Channel: %2$d\nAddress: %3$s</string>
+	<string name="connectbutton">Connect</string>
+	<string name="settingsbutton">Settings</string>
+				
 </resources>   

@@ -30,7 +30,6 @@ package org.servalproject.wizard;
 
 import java.util.List;
 
-import org.servalproject.Control;
 import org.servalproject.Main;
 import org.servalproject.R;
 import org.servalproject.ServalBatPhoneApplication;
@@ -131,10 +130,6 @@ public class SetPhoneNumber extends Activity {
 								}
 							}
 
-							Intent serviceIntent = new Intent(
-									SetPhoneNumber.this, Control.class);
-							startService(serviceIntent);
-
 							return true;
 						} catch (IllegalArgumentException e) {
 							app.displayToastMessage(e.getMessage());
@@ -203,6 +198,7 @@ public class SetPhoneNumber extends Activity {
 
 		String existingName = null;
 		String existingNumber = null;
+		String sidAbbrev = null;
 
 		List<Identity> identities = Identity.getIdentities();
 
@@ -211,20 +207,22 @@ public class SetPhoneNumber extends Activity {
 
 			existingName = identity.getName();
 			existingNumber = identity.getDid();
+			sidAbbrev = identity.subscriberId.abbreviation();
 		} else {
+			// try to get number from phone, probably wont work though...
+			TelephonyManager mTelephonyMgr = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+			existingNumber = mTelephonyMgr.getLine1Number();
+
 			try {
 				identity = Identity.createIdentity();
+				sidAbbrev = identity.subscriberId.abbreviation();
 			} catch (Exception e) {
 				Log.e("SetPhoneNumber", e.getMessage(), e);
 				app.displayToastMessage(e.getMessage());
 			}
-
-			// try to get number from phone, probably wont work though...
-			TelephonyManager mTelephonyMgr = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-			existingNumber = mTelephonyMgr.getLine1Number();
 		}
 
-		sid.setText(identity.subscriberId.abbreviation());
+		sid.setText(sidAbbrev);
 		number.setText(existingNumber);
 		name.setText(existingName);
 	}
