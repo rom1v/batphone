@@ -88,7 +88,7 @@ public class AudioRecorder implements Runnable {
 				8000,
 				AudioFormat.CHANNEL_IN_MONO,
 				AudioFormat.ENCODING_PCM_16BIT,
-				8 * 60 * 2);
+				8 * 100 * 2);
 		codecInput = audioInput;
 	}
 
@@ -131,7 +131,7 @@ public class AudioRecorder implements Runnable {
 
 		Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
 
-		while (!stopMe) {
+		while (!(stopMe || monitor.hasStopped())) {
 			try {
 				if (discard || codec == null) {
 					// skip 20ms of audio at a time until we know the codec
