@@ -28,8 +28,8 @@ package org.servalproject.ui;
 import java.io.File;
 
 import org.servalproject.PreparationWizard;
-import org.servalproject.PreparationWizard.Action;
 import org.servalproject.R;
+import org.servalproject.ServalBatPhoneApplication;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -86,7 +86,10 @@ public class SettingsScreenActivity extends Activity {
 			@Override
 			public void onClick(View arg0) {
 				// Clear out old attempt_ files
-				File varDir = new File("/data/data/org.servalproject/var/");
+				File varDir = new File(
+						ServalBatPhoneApplication.context.coretask.DATA_FILE_PATH
+								+
+								"/var/");
 				if (varDir.isDirectory())
 					for (File f : varDir.listFiles()) {
 						if (!f.getName().startsWith("attempt_"))
@@ -94,7 +97,6 @@ public class SettingsScreenActivity extends Activity {
 						f.delete();
 					}
 				// Re-run wizard
-				PreparationWizard.currentAction = Action.NotStarted;
 				Intent prepintent = new Intent(SettingsScreenActivity.this,
 						PreparationWizard.class);
 				prepintent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
