@@ -98,12 +98,17 @@ public class WifiApControl {
 		}
 	}
 
+	public static int fixStateNumber(int state) {
+		// Android's internal state constants were changed some time before
+		// version 4.0
+		if (state >= 10)
+			state -= 10;
+		return state;
+	}
+
 	public int getWifiApState(){
 		try {
-			int ret = (Integer) getWifiApState.invoke(mgr);
-			if (ret >= 10)
-				ret -= 10;
-			return ret;
+			return fixStateNumber((Integer) getWifiApState.invoke(mgr));
 		} catch (Exception e) {
 			Log.v("BatPhone",e.toString(),e); // shouldn't happen
 			return -1;
@@ -144,7 +149,7 @@ public class WifiApControl {
 			return getWifiApConfiguration();
 		}
 	};
-	private WifiApNetwork currentNetwork;
+	private WifiApNetwork currentApNetwork;
 
 	private WifiConfiguration readProfile(String name) {
 		SharedPreferences prefs = ServalBatPhoneApplication.context
@@ -255,7 +260,7 @@ public class WifiApControl {
 			apNetworks.add(new WifiApNetwork(readProfile(name)));
 		}
 		onApStateChanged(this.getWifiApState());
-		if (currentNetwork != userNetwork) {
+		if (currentApNetwork != userNetwork) {
 			File saved = new File(app.coretask.DATA_FILE_PATH
 					+ "/shared_prefs/saved_user_ap.xml");
 			if (saved.exists()) {
@@ -303,8 +308,8 @@ public class WifiApControl {
 		WifiApNetwork network = getMatchingNetwork();
 		WifiApNetwork oldNetwork = null;
 		synchronized (this) {
-			oldNetwork = currentNetwork;
-			currentNetwork = network;
+			oldNetwork = currentApNetwork;
+			currentApNetwork = network;
 		}
 		boolean dirty = false;
 
@@ -320,5 +325,12 @@ public class WifiApControl {
 
 		if (dirty && app.nm != null)
 			app.nm.onAdhocStateChanged();
+	}
+
+	public NetworkConfiguration getActiveNetwork() {
+		WifiApNetwork n = currentApNetwork;
+		if (n != null)
+			return n;
+		return null;
 	}
 }
