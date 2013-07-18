@@ -7,12 +7,14 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.servalproject.R;
 import org.servalproject.ServalBatPhoneApplication;
 import org.servalproject.shell.CommandLog;
 import org.servalproject.shell.Shell;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
@@ -134,18 +136,18 @@ public class WifiAdhocControl {
 		return adhocNetworks.get(0);
 	}
 
-	public static String stateString(int state) {
+	public static String stateString(Context context, int state) {
 		switch (state) {
 		case ADHOC_STATE_DISABLED:
-			return "Disabled";
+			return context.getString(R.string.wifi_disabled);
 		case ADHOC_STATE_ENABLING:
-			return "Enabling";
+			return context.getString(R.string.wifi_enabling);
 		case ADHOC_STATE_ENABLED:
-			return "Enabled";
+			return context.getString(R.string.wifi_enabled);
 		case ADHOC_STATE_DISABLING:
-			return "Disabling";
+			return context.getString(R.string.wifi_disabling);
 		}
-		return "Error";
+		return context.getString(R.string.wifi_error);
 	}
 
 	public int getState() {
@@ -332,19 +334,26 @@ public class WifiAdhocControl {
 		boolean ret = false;
 		log.log("Scanning for known android hardware");
 
-		if (detection.getDetectedChipsets().size() == 0) {
-			log.log("Hardware is unknown, scanning for wifi modules");
-
-			detection.inventSupport();
+		Set<Chipset> chipsets = detection.getDetectedChipsets();
+		boolean foundNonExperimental = false;
+		for (Chipset c : chipsets) {
+			if (!c.experimental)
+				foundNonExperimental = true;
 		}
 
-		for (Chipset c : detection.getDetectedChipsets()) {
+		if (!foundNonExperimental) {
+			log.log("Hardware may be unknown, scanning for wifi modules");
+			detection.inventSupport();
+			chipsets = detection.getDetectedChipsets();
+		}
+
+		for (Chipset c : chipsets) {
 			log.log("Testing - " + c.chipset);
 
 			try {
 				if (testAdhoc(c, shell)) {
 					ret = true;
-					log.log("Found support for " + c.chipset);
+					log.log("Success using profile; " + c.chipset);
 					break;
 				}
 			} catch (IOException e) {
@@ -354,7 +363,7 @@ public class WifiAdhocControl {
 
 		if (!ret) {
 			detection.setChipset(null);
-			log.log("No adhoc support found");
+			log.log("No Mesh support found");
 		}
 		Editor ed = app.settings.edit();
 		ed.putString("detectedChipset", ret ? detection.getChipset()

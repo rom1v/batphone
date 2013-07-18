@@ -1,5 +1,6 @@
 package org.servalproject.batphone;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
@@ -7,9 +8,13 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import org.servalproject.ServalBatPhoneApplication;
-import org.servalproject.audio.AudioPlayer;
-import org.servalproject.audio.AudioRecorder;
-import org.servalproject.audio.Oslec;
+import org.servalproject.audio.AudioBuffer;
+import org.servalproject.audio.AudioPlaybackStream;
+import org.servalproject.audio.AudioRecordStream;
+import org.servalproject.audio.AudioStream;
+import org.servalproject.audio.BufferList;
+import org.servalproject.audio.JitterStream;
+import org.servalproject.audio.TranscodeStream;
 import org.servalproject.batphone.VoMP.State;
 import org.servalproject.servald.DnaResult;
 import org.servalproject.servald.Identity;
@@ -21,8 +26,10 @@ import org.servalproject.servald.SubscriberId;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.MediaRecorder;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.SystemClock;
@@ -38,6 +45,7 @@ public class CallHandler {
 	String name;
 
 	int local_id = 0;
+	String localIdString = null;
 	VoMP.State local_state = State.NoSuchCall;
 	VoMP.State remote_state = State.NoSuchCall;
 	VoMP.Codec codec = VoMP.Codec.Signed16;
@@ -52,12 +60,33 @@ public class CallHandler {
 	private MediaPlayer mediaPlayer;
 	private long ping = 0;
 	private boolean sendPings = false;
+	private BufferList bufferList;
 	final Timer timer = new Timer();
 
-	public AudioRecorder recorder;
-	public final AudioPlayer player;
+	private Thread audioRecordThread;
+	private AudioRecordStream recorder;
+	public JitterStream player;
 	private boolean ringing = false;
 	private boolean audioRunning = false;
+
+	private static final String TAG = "CallHandler";
+	private AudioStream monitorOutput = new AudioStream() {
+		@Override
+		public int write(AudioBuffer buff) throws IOException {
+			try {
+				if (monitor.hasStopped())
+					throw new EOFException();
+				monitor.sendMessageAndData(buff.buff, buff.dataLen, "audio ",
+						localIdString, " ",
+						buff.codec.codeString, " ",
+						Integer.toString(buff.sampleStart), " ",
+						Integer.toString(buff.sequence));
+			} finally {
+				buff.release();
+			}
+			return 0;
+		}
+	};
 
 	public static void dial(DnaResult result) throws IOException {
 		CallHandler call = createCall(result.peer);
@@ -108,6 +137,7 @@ public class CallHandler {
 
 				CallHandler call = createCall(peer);
 				call.local_id = local_session;
+				call.localIdString = Integer.toHexString(local_session);
 				call.did = remote_did;
 				call.local_state = State.CallPrep;
 				call.remote_state = State.RingingOut;
@@ -128,11 +158,6 @@ public class CallHandler {
 			Peer peer) {
 		this.app = app;
 		this.monitor = monitor;
-		Oslec echoCanceler = null;
-		// TODO make sure echo canceler is beneficial.
-		if (false)
-			echoCanceler = new Oslec();
-		this.player = new AudioPlayer(echoCanceler, app);
 		this.remotePeer = peer;
 		this.did = peer.did;
 		this.name = peer.name;
@@ -141,12 +166,13 @@ public class CallHandler {
 		timer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
-				if (SystemClock.elapsedRealtime() > (lastKeepAliveTime + 5000)) {
+				long now = SystemClock.elapsedRealtime();
+				if (now > (lastKeepAliveTime + 5000)) {
 					// End call if no keep alive received
-					Log.d("VoMPCall",
+					Log.d(TAG,
 							"Keepalive expired for call: "
 									+ lastKeepAliveTime + " vs "
-									+ SystemClock.elapsedRealtime());
+									+ now);
 					hangup();
 				}
 			}
@@ -161,7 +187,7 @@ public class CallHandler {
 	}
 
 	public void hangup() {
-		Log.d("VoMPCall", "Hanging up");
+		Log.d(TAG, "Hanging up");
 
 		// stop audio now, as servald will ignore it anyway
 		if (audioRunning)
@@ -177,7 +203,7 @@ public class CallHandler {
 		if (local_state != VoMP.State.RingingIn)
 			return;
 
-		Log.d("VoMPCall", "Picking up");
+		Log.d(TAG, "Picking up");
 		monitor.sendMessageAndLog("pickup ", Integer.toHexString(local_id));
 	}
 
@@ -185,7 +211,7 @@ public class CallHandler {
 		if (ringing)
 			return;
 
-		Log.v("CallHandler", "Starting ring tone");
+		Log.v(TAG, "Starting ring tone");
 		final AudioManager audioManager = (AudioManager) app
 				.getSystemService(Context.AUDIO_SERVICE);
 		if (audioManager.getStreamVolume(AudioManager.STREAM_RING) != 0) {
@@ -200,7 +226,7 @@ public class CallHandler {
 				mediaPlayer.prepare();
 				mediaPlayer.start();
 			} catch (Exception e) {
-				Log.e("VoMPCall",
+				Log.e(TAG,
 						"Could not get ring tone: " + e.toString(), e);
 			}
 		} else {
@@ -226,7 +252,7 @@ public class CallHandler {
 		if (!ringing)
 			return;
 
-		Log.v("CallHandler", "Stopping ring tone");
+		Log.v(TAG, "Stopping ring tone");
 		if (mediaPlayer != null) {
 			mediaPlayer.stop();
 			mediaPlayer.release();
@@ -243,13 +269,31 @@ public class CallHandler {
 			if (this.recorder == null)
 				throw new IllegalStateException(
 						"Audio recorder has not been initialised");
-			Log.v("CallHandler", "Starting audio");
-			this.recorder.startRecording(codec);
+			Log.v(TAG, "Starting audio");
+
+			this.recorder.setStream(TranscodeStream.getEncoder(monitorOutput,
+					codec));
+
+			AudioManager am = (AudioManager) app
+					.getSystemService(Context.AUDIO_SERVICE);
+
+			AudioPlaybackStream playback = new AudioPlaybackStream(
+					am,
+					AudioManager.STREAM_VOICE_CALL,
+					SAMPLE_RATE,
+					AudioFormat.CHANNEL_OUT_MONO,
+					AudioFormat.ENCODING_PCM_16BIT,
+					8 * 60 * 2);
+
+			AudioStream output = TranscodeStream.getDecoder(playback);
+
+			this.player = new JitterStream(output);
 			this.player.startPlaying();
+
 			callStarted = SystemClock.elapsedRealtime();
 			audioRunning = true;
 		} catch (Exception e) {
-			Log.v("CallHandler", e.getMessage(), e);
+			Log.v(TAG, e.getMessage(), e);
 		}
 	}
 
@@ -257,25 +301,23 @@ public class CallHandler {
 		if (this.recorder == null)
 			throw new IllegalStateException(
 					"Audio recorder has not been initialised");
-		Log.v("CallHandler", "Stopping audio");
-		this.recorder.stopRecording();
-		this.player.stopPlaying();
+		Log.v(TAG, "Stopping audio");
+		this.recorder.close();
+		try {
+			this.player.close();
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage(), e);
+		}
 		audioRunning = false;
 		callEnded = SystemClock.elapsedRealtime();
 	}
 
-	private void prepareAudio() {
-		try {
-			this.player.prepareAudio();
-			this.recorder.prepareAudio();
-		} catch (IOException e) {
-			Log.e("CallHandler", e.getMessage(), e);
-		}
-	}
+	static final int AUDIO_BLOCK_SIZE = 20 * 8 * 2;
+	static final int SAMPLE_RATE = 8000;
 
 	private void endCall() {
 		if (ui != null) {
-			Log.v("CallHandler", "Starting completed call ui");
+			Log.v(TAG, "Starting completed call ui");
 			Intent myIntent = new Intent(app,
 					CompletedCall.class);
 
@@ -298,10 +340,16 @@ public class CallHandler {
 	}
 
 	private void cleanup() {
-		if (this.recorder != null)
-			this.recorder.stopRecording();
+		if (this.recorder != null) {
+			this.recorder.close();
+			recorder = null;
+		}
 		if (this.player != null)
-			this.player.cleanup();
+			try {
+				this.player.close();
+			} catch (IOException e) {
+				Log.e(TAG, e.getMessage(), e);
+			}
 		timer.cancel();
 		NotificationManager nm = (NotificationManager) app
 				.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -311,14 +359,8 @@ public class CallHandler {
 
 	private void callStateChanged() {
 
-		Log.v("CallHandler", "Call state changed to " + local_state + ", "
+		Log.v(TAG, "Call state changed to " + local_state + ", "
 				+ remote_state);
-
-		if (this.recorder == null && this.local_id != 0) {
-			this.recorder = new AudioRecorder(player.echoCanceler,
-					Integer.toHexString(local_id),
-					monitor);
-		}
 
 		if (remote_state == VoMP.State.RingingOut
 				&& local_state.ordinal() <= VoMP.State.RingingIn.ordinal())
@@ -328,10 +370,6 @@ public class CallHandler {
 			stopRinging();
 
 		// TODO if remote_state == VoMP.State.RingingIn show / play indicator
-
-		if (local_state == VoMP.State.RingingIn
-				|| local_state == VoMP.State.RingingOut)
-			prepareAudio();
 
 		if (audioRunning != (local_state == VoMP.State.InCall)) {
 			if (audioRunning) {
@@ -360,7 +398,7 @@ public class CallHandler {
 
 		default:
 			if (ui == null && !uiStarted) {
-				Log.v("CallHandler", "Starting in call ui");
+				Log.v(TAG, "Starting in call ui");
 				uiStarted = true;
 
 				Intent myIntent = new Intent(
@@ -391,8 +429,10 @@ public class CallHandler {
 
 		if (r_sid.equals(remotePeer.sid) && (local_id == 0 || local_id == l_id)) {
 			// make sure we only listen to events for the same remote sid & id
-
-			local_id = l_id;
+			if (local_id == 0) {
+				local_id = l_id;
+				localIdString = Integer.toHexString(l_id);
+			}
 
 			VoMP.State newLocal = VoMP.State.getState(l_state);
 			VoMP.State newRemote = VoMP.State.getState(r_state);
@@ -402,6 +442,7 @@ public class CallHandler {
 
 			local_state = newLocal;
 			remote_state = newRemote;
+			lastKeepAliveTime = SystemClock.elapsedRealtime();
 
 			if (stateChanged)
 				callStateChanged();
@@ -418,7 +459,7 @@ public class CallHandler {
 			app.displayToastMessage("Unable to place call as I don't know who I am");
 			return;
 		}
-		Log.v("CallHandler", "Calling " + remotePeer.sid.abbreviation() + "/"
+		Log.v(TAG, "Calling " + remotePeer.sid.abbreviation() + "/"
 				+ did);
 		initiated = true;
 		monitor.sendMessageAndLog("call ",
@@ -426,20 +467,51 @@ public class CallHandler {
 				main.getDid(), " ", did);
 	}
 
-	public int receivedAudio(int local_session, int start_time,
-			int jitter_delay, int this_delay, VoMP.Codec codec, InputStream in,
+	public int receivedAudio(Iterator<String> args, InputStream in,
 			int dataBytes) throws IOException {
+		int local_session = ServalDMonitor.parseIntHex(args.next());
+		if (local_id != local_session) {
+			Log.v(TAG, "Mismatch, audio for wrong session");
+			return 0;
+		}
 		lastKeepAliveTime = SystemClock.elapsedRealtime();
-		return player.receivedAudio(
-				local_session, start_time, jitter_delay, this_delay,
-				codec, in, dataBytes);
+
+		if (bufferList == null)
+			bufferList = new BufferList(VoMP.Codec.Signed16.maxBufferSize() / 2);
+
+		if (dataBytes > bufferList.mtu) {
+			Log.v(TAG, "Audio size " + dataBytes
+					+ " is larger than buffer MTU " + bufferList.mtu);
+			return 0;
+		}
+		AudioBuffer buff = bufferList.getBuffer();
+
+		buff.received = lastKeepAliveTime;
+
+		buff.codec = VoMP.Codec.getCodec(ServalDMonitor
+				.parseInt(args.next()));
+		buff.sampleStart = ServalDMonitor.parseInt(args.next());
+		buff.sequence = ServalDMonitor.parseInt(args.next()); // sequence
+		player.setJitterDelay(ServalDMonitor.parseInt(args.next()));
+		buff.thisDelay = ServalDMonitor.parseInt(args.next());
+		buff.dataLen = dataBytes;
+
+		int read = 0;
+		while (read < dataBytes) {
+			int actualRead = in.read(buff.buff, read, dataBytes - read);
+			if (actualRead < 0)
+				throw new EOFException();
+			read += actualRead;
+		}
+		player.write(buff);
+		return read;
 	}
 
 	public void keepAlive(int l_id) {
 		if (l_id == local_id) {
 			lastKeepAliveTime = SystemClock.elapsedRealtime();
 			if (sendPings && ping == 0) {
-				Log.v("CallHandler", "Sending PING");
+				Log.v(TAG, "Sending PING");
 				this.ping = System.nanoTime();
 				monitor.sendMessageAndLog("PING");
 			}
@@ -449,40 +521,52 @@ public class CallHandler {
 	public void monitor(int flags) {
 		if (ping != 0) {
 			long pong = System.nanoTime();
-			Log.v("CallHandler",
+			Log.v(TAG,
 					"Serval monitor latency: "
 							+ Double.toString((pong - ping) / 1000000000.0));
 			ping = 0;
 		}
 	}
 
-	private boolean isSupported(VoMP.Codec codec) {
-		switch (codec) {
-		case Signed16:
-		case Ulaw8:
-		case Alaw8:
-			return true;
-		}
-		return false;
-	}
-
 	public void codecs(int l_id, Iterator<String> args) {
 		if (l_id != local_id)
 			return;
 
-		VoMP.Codec best = null;
+		try {
+			VoMP.Codec best = null;
 
-		while (args.hasNext()) {
-			int c = ServalDMonitor.parseInt(args.next());
-			VoMP.Codec codec = VoMP.Codec.getCodec(c);
-			if (!isSupported(codec))
-				continue;
+			while (args.hasNext()) {
+				int c = ServalDMonitor.parseInt(args.next());
+				VoMP.Codec codec = VoMP.Codec.getCodec(c);
+				if (!codec.isSupported())
+					continue;
 
-			if (best == null || codec.preference > best.preference) {
-				best = codec;
+				if (best == null || codec.preference > best.preference) {
+					best = codec;
+				}
 			}
+
+			if (best == null)
+				throw new IOException("Unable to find a common codec");
+
+			this.codec = best;
+
+			recorder = new AudioRecordStream(
+					null,
+					MediaRecorder.AudioSource.MIC,
+					codec.sampleRate,
+					AudioFormat.CHANNEL_IN_MONO,
+					AudioFormat.ENCODING_PCM_16BIT,
+					8 * 100 * 2,
+					codec.audioBufferSize(),
+					codec.maxBufferSize());
+
+			audioRecordThread = new Thread(recorder, "Recording");
+			audioRecordThread.start();
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage(), e);
+			this.hangup();
 		}
-		this.codec = best;
 	}
 
 	public long getCallStarted() {

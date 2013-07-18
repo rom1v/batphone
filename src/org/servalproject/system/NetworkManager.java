@@ -1,11 +1,17 @@
 package org.servalproject.system;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.servalproject.R;
 import org.servalproject.ServalBatPhoneApplication;
 
 import android.content.Context;
@@ -61,7 +67,8 @@ public class NetworkManager {
 		if (control.wifiManager.isWifiEnabled()) {
 			WifiInfo connection = control.wifiManager.getConnectionInfo();
 			if (connection != null
-					&& connection.getSupplicantState() == SupplicantState.DISCONNECTED)
+					&& (connection.getSupplicantState() == SupplicantState.DISCONNECTED ||
+					connection.getBSSID() == null))
 				connection = null;
 			// build a map of pre-configured access points
 			List<WifiConfiguration> configured = control.wifiManager
@@ -71,6 +78,8 @@ public class NetworkManager {
 			if (configured != null) {
 				for (WifiConfiguration c : configured) {
 					String ssid = c.SSID;
+					if (ssid == null)
+						continue;
 					if (ssid.startsWith("\"") && ssid.endsWith("\""))
 						ssid = ssid.substring(1, ssid.length() - 1);
 					configuredMap.put(ssid, c);
@@ -222,24 +231,20 @@ public class NetworkManager {
 		this.changes = changes;
 	}
 
-	public String getSSID() {
-		if (this.control.wifiManager.isWifiEnabled()) {
-			WifiInfo clientInfo = this.control.wifiManager.getConnectionInfo();
-			return clientInfo != null ? clientInfo.getSSID() : null;
+	public InetAddress getAddress() throws SocketException {
+		// TODO get actual address from interface
+		for (Enumeration<NetworkInterface> interfaces = NetworkInterface
+				.getNetworkInterfaces(); interfaces.hasMoreElements();) {
+			for (Enumeration<InetAddress> enumIpAddress = interfaces
+					.nextElement().getInetAddresses(); enumIpAddress
+					.hasMoreElements();) {
+				InetAddress iNetAddress = enumIpAddress.nextElement();
+				if (!iNetAddress.isLoopbackAddress()) {
+					// Make sure we don't return cellular interface....
+					return iNetAddress;
+				}
+			}
 		}
-
-		if (this.control.wifiApManager != null
-				&& this.control.wifiApManager.isWifiApEnabled()) {
-			WifiConfiguration config = control.wifiApManager
-					.getWifiApConfiguration();
-			return config == null ? null : config.SSID;
-		}
-
-		if (this.control.adhocControl.getState() == WifiAdhocControl.ADHOC_STATE_ENABLED) {
-			WifiAdhocNetwork config = this.control.adhocControl.getConfig();
-			return config == null ? null : config.getSSID();
-		}
-
 		return null;
 	}
 
@@ -258,6 +263,15 @@ public class NetworkManager {
 			return true;
 
 		return false;
+	}
+
+	public NetworkConfiguration getActiveNetwork() {
+		NetworkConfiguration ret = connectedNetwork;
+		if (ret == null)
+			ret = this.control.wifiApManager.getActiveNetwork();
+		if (ret == null)
+			ret = this.control.adhocControl.getConfig();
+		return ret;
 	}
 
 	public void connect(NetworkConfiguration config) {
@@ -296,40 +310,50 @@ public class NetworkManager {
 	private WifiClient wifiClient = new WifiClient();
 	class WifiClient extends NetworkConfiguration {
 
-		private String stateString() {
+		private String stateString(Context context) {
 			switch (control.wifiManager.getWifiState()) {
 			case WifiManager.WIFI_STATE_DISABLED:
-				return "Disabled";
+				return context.getString(R.string.wifi_disabled);
 			case WifiManager.WIFI_STATE_ENABLED:
-				return "Enabled";
+				return context.getString(R.string.wifi_enabled);
 			case WifiManager.WIFI_STATE_DISABLING:
-				return "Disabling";
+				return context.getString(R.string.wifi_disabling);
 			case WifiManager.WIFI_STATE_ENABLING:
-				return "Enabling";
+				return context.getString(R.string.wifi_enabling);
 			case WifiManager.WIFI_STATE_UNKNOWN:
-				return "Unknown";
+				return context.getString(R.string.wifi_error);
 			}
-			return "";
+			return null;
 		}
 
 		@Override
 		public String toString() {
-			return "Client Mode " + stateString();
+			return getSSID();
 		}
 
 		@Override
 		public String getSSID() {
-			return "Client Mode";
+			return "Wi-Fi";
 		}
 
 		@Override
-		public String getStatus() {
-			return stateString();
+		public String getStatus(Context context) {
+			return stateString(context);
 		}
 
 		@Override
 		public int getBars() {
 			return -1;
+		}
+
+		@Override
+		public String getType() {
+			return null;
+		}
+
+		@Override
+		public InetAddress getAddress() throws UnknownHostException {
+			return null;
 		}
 	}
 
@@ -339,12 +363,15 @@ public class NetworkManager {
 	}
 
 	public void onWifiNetworkStateChanged(Intent intent) {
-		networkInfo = intent
+		NetworkInfo network = intent
 				.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
-		String bssid = intent.getStringExtra(WifiManager.EXTRA_BSSID);
-		this.getScanResults();
-
-		if (this.changes != null)
-			this.changes.onNetworkChange();
+		switch (network.getType()) {
+		case ConnectivityManager.TYPE_WIFI:
+			this.networkInfo = network;
+			// String bssid = intent.getStringExtra(WifiManager.EXTRA_BSSID);
+			this.getScanResults();
+			if (this.changes != null)
+				this.changes.onNetworkChange();
+		}
 	}
 }

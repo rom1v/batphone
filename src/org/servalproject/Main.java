@@ -24,14 +24,18 @@ import org.servalproject.ServalBatPhoneApplication.State;
 import org.servalproject.account.AccountService;
 import org.servalproject.rhizome.RhizomeMain;
 import org.servalproject.servald.Identity;
+import org.servalproject.servald.ServalD;
 import org.servalproject.ui.Networks;
 import org.servalproject.ui.ShareUsActivity;
-import org.servalproject.ui.help.HelpActivity;
+import org.servalproject.ui.help.HtmlHelp;
 import org.servalproject.wizard.Wizard;
 
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -41,6 +45,7 @@ import android.content.SharedPreferences.Editor;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
@@ -99,6 +104,10 @@ public class Main extends Activity {
 				startActivity(new Intent(Intent.ACTION_DIAL));
 				break;
 			case R.id.messageLabel:
+				if (!ServalD.isRhizomeEnabled()) {
+					app.displayToastMessage("Messaging cannot function without an sdcard");
+					return;
+				}
 				startActivity(new Intent(getApplicationContext(),
 						org.servalproject.messages.MessagesListActivity.class));
 				break;
@@ -118,8 +127,10 @@ public class Main extends Activity {
 						RhizomeMain.class));
 				break;
 			case R.id.helpLabel:
-				startActivity(new Intent(getApplicationContext(),
-						HelpActivity.class));
+				Intent intent = new Intent(getApplicationContext(),
+						HtmlHelp.class);
+				intent.putExtra("page", "helpindex.html");
+				startActivity(intent);
 				break;
 			case R.id.servalLabel:
 				startActivity(new Intent(getApplicationContext(),
@@ -224,6 +235,27 @@ public class Main extends Activity {
 		}
 
 		if (state == State.Installing || state == State.Upgrading) {
+			// Construct an intent to start the install
+			Intent i = new Intent(Intent.ACTION_VIEW,
+					Uri.parse("http://www.servalproject.org/donations"));
+
+			Notification n = new Notification(R.drawable.ic_serval_logo,
+					"The Serval Project needs your support",
+					System.currentTimeMillis());
+
+			n.setLatestEventInfo(
+					this,
+					"We need your support",
+					"Serval depends on donations.",
+					PendingIntent.getActivity(this, 0, i,
+							PendingIntent.FLAG_ONE_SHOT));
+
+			n.flags = Notification.FLAG_AUTO_CANCEL;
+
+			NotificationManager nm = (NotificationManager) this
+					.getSystemService(Context.NOTIFICATION_SERVICE);
+			nm.notify("Donate", 0, n);
+
 			new AsyncTask<Void, Void, Void>() {
 				@Override
 				protected Void doInBackground(Void... arg0) {

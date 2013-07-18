@@ -1,6 +1,6 @@
 package org.servalproject;
 
-import java.io.File;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
@@ -28,6 +28,7 @@ import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.util.Log;
 
 /**
@@ -43,6 +44,7 @@ public class Control extends Service {
 	private boolean serviceRunning = false;
 	private SimpleWebServer webServer;
 	private int peerCount = -1;
+	private PowerManager.WakeLock cpuLock;
 	private WifiControl.AlarmLock alarmLock;
 	private WifiManager.MulticastLock multicastLock = null;
 
@@ -84,9 +86,9 @@ public class Control extends Service {
 
 		if (servicesRunning)
 			return;
-
-		this.handler.removeCallbacks(notification);
+		cpuLock.acquire();
 		multicastLock.acquire();
+		this.handler.removeCallbacks(notification);
 		Log.d("BatPhone", "wifiOn=true, multicast lock acquired");
 		try {
 			startServalD();
@@ -95,8 +97,7 @@ public class Control extends Service {
 		}
 		try {
 			if (webServer == null)
-				webServer = new SimpleWebServer(new File(
-						app.coretask.DATA_FILE_PATH + "/htdocs"), 8080);
+				webServer = new SimpleWebServer(8080);
 		} catch (IOException e) {
 			Log.e("BatPhone", e.toString(), e);
 		}
@@ -128,6 +129,7 @@ public class Control extends Service {
 			alarmLock.change(false);
 		app.updateStatus("Off");
 		servicesRunning = false;
+		cpuLock.release();
 	}
 
 	private synchronized void modeChanged() {
@@ -337,20 +339,9 @@ public class Control extends Service {
 				}
 
 			} else if (cmd.equalsIgnoreCase("AUDIO")) {
-				int local_session = ServalDMonitor.parseIntHex(args.next());
-
-				VoMP.Codec codec = VoMP.Codec.getCodec(ServalDMonitor
-						.parseInt(args.next()));
-				int start_time = ServalDMonitor.parseInt(args.next());
-				args.next(); // sequence
-				int jitter_delay = ServalDMonitor.parseInt(args.next());
-				int this_delay = ServalDMonitor.parseInt(args.next());
 
 				if (app.callHandler != null) {
-					ret += app.callHandler.receivedAudio(
-							local_session, start_time, jitter_delay,
-							this_delay,
-							codec, in, dataBytes);
+					ret += app.callHandler.receivedAudio(args, in, dataBytes);
 				}
 			} else if (cmd.equalsIgnoreCase("HANGUP")) {
 				if (app.callHandler == null)
@@ -387,8 +378,22 @@ public class Control extends Service {
 				try {
 					String manifestId=args.next();
 					BundleId bid=new BundleId(manifestId);
-
-					RhizomeManifest manifest = Rhizome.readManifest(bid);
+					RhizomeManifest manifest;
+					if (dataBytes > 0) {
+						byte manifestBytes[] = new byte[dataBytes];
+						int offset = 0;
+						while (offset < dataBytes) {
+							int read = in.read(manifestBytes, offset, dataBytes
+									- offset);
+							if (read < 0)
+								throw new EOFException();
+							offset += read;
+							ret += read;
+						}
+						manifest = RhizomeManifest.fromByteArray(manifestBytes);
+					} else {
+						manifest = Rhizome.readManifest(bid);
+					}
 					Rhizome.notifyIncomingBundle(manifest);
 				} catch (Exception e) {
 					Log.v("ServalDMonitor", e.getMessage(), e);
@@ -406,10 +411,12 @@ public class Control extends Service {
 				app.updateStatus("Running");
 				// tell servald that we can initiate and answer phone calls, and
 				// the list of codecs we support
-				app.servaldMonitor.sendMessage("monitor vomp "
-						+ VoMP.Codec.Signed16.codeString + " "
-						+ VoMP.Codec.Ulaw8.codeString + " "
-						+ VoMP.Codec.Alaw8.codeString);
+				StringBuilder sb = new StringBuilder("monitor vomp");
+				for (VoMP.Codec codec : VoMP.Codec.values()) {
+					if (codec.isSupported())
+						sb.append(' ').append(codec.codeString);
+				}
+				app.servaldMonitor.sendMessage(sb.toString());
 				app.servaldMonitor
 						.sendMessage("monitor rhizome");
 				app.servaldMonitor.sendMessage("monitor peers");
@@ -438,6 +445,10 @@ public class Control extends Service {
 	@Override
 	public void onCreate() {
 		this.app = (ServalBatPhoneApplication) this.getApplication();
+		PowerManager pm = (PowerManager) app
+				.getSystemService(Context.POWER_SERVICE);
+		cpuLock = pm
+				.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Services");
 
 		super.onCreate();
 	}
