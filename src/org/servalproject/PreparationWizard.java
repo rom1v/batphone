@@ -42,13 +42,18 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.os.PowerManager;
 import android.util.Log;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
 import android.widget.TextView;
 
-public class PreparationWizard extends Activity implements LogOutput {
+public class PreparationWizard extends Activity implements LogOutput,
+		OnClickListener {
 
 	protected static final int DISMISS_PROGRESS_DIALOG = 0;
 	protected static final int CREATE_PROGRESS_DIALOG = 1;
 	private TextView status;
+	private Button done;
 	private ServalBatPhoneApplication app;
 
 	private HandlerThread handlerThread;
@@ -65,8 +70,9 @@ public class PreparationWizard extends Activity implements LogOutput {
 
 		setContentView(R.layout.preparationlayout);
 		status = (TextView) this.findViewById(R.id.status);
+		done = (Button) this.findViewById(R.id.done);
 		app = (ServalBatPhoneApplication) this.getApplication();
-
+		done.setOnClickListener(this);
 		// Are we recovering from a crash / reinstall?
 		handlerThread = new HandlerThread("WifiControl");
 		handlerThread.start();
@@ -152,18 +158,31 @@ public class PreparationWizard extends Activity implements LogOutput {
 			}
 		}
 
-		finish();
 		wakeLock.release();
 		state = -1;
+		this.runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				done.setVisibility(View.VISIBLE);
+			}
+		});
 	}
 
 	private void failed(Throwable t) {
+		String message = t.getMessage();
+		if (message == null)
+			message = "An unknown error occurred; "
+					+ t.getClass().getSimpleName();
+		log(message);
 		Log.e(TAG, t.getMessage(), t);
 		complete();
 	}
 
 	@Override
 	public void log(final String message) {
+		if (message == null)
+			return;
+
 		Log.v(TAG, message);
 		if (app.isMainThread()) {
 			status.setText(message);
@@ -174,6 +193,15 @@ public class PreparationWizard extends Activity implements LogOutput {
 					status.setText(message);
 				}
 			});
+		}
+	}
+
+	@Override
+	public void onClick(View view) {
+		switch (view.getId()) {
+		case R.id.done:
+			finish();
+			break;
 		}
 	}
 }

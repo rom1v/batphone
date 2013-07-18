@@ -234,6 +234,7 @@ public class PeerList extends ListActivity {
 		displayed = false;
 		unresolved.clear();
 		peers.clear();
+		listAdapter.notifyDataSetChanged();
 		WalkieTalkieService.stopListening(this);
 	}
 

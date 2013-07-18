@@ -1,14 +1,21 @@
 package org.servalproject.system;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
+import android.content.Context;
+
 
 public abstract class NetworkConfiguration implements
 		Comparable<NetworkConfiguration> {
 
 	public abstract String getSSID();
 
-	public abstract String getStatus();
+	public abstract String getStatus(Context context);
 
 	public abstract int getBars();
+
+	public abstract InetAddress getAddress() throws UnknownHostException;
 
 	@Override
 	public boolean equals(Object o) {
@@ -32,4 +39,6 @@ public abstract class NetworkConfiguration implements
 	public int compareTo(NetworkConfiguration o) {
 		return getSSID().compareTo(o.getSSID());
 	}
+
+	public abstract String getType();
 }
