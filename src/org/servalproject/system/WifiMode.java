@@ -29,8 +29,6 @@ import org.servalproject.ServalBatPhoneApplication;
 import org.servalproject.shell.CommandCapture;
 import org.servalproject.shell.Shell;
 
-import android.annotation.TargetApi;
-import android.os.Build;
 import android.util.Log;
 
 public enum WifiMode {
@@ -67,7 +65,6 @@ public enum WifiMode {
 	public static String lastIwconfigOutput;
 	private static Pattern iwTypePattern = Pattern.compile("type\\s(\\w+)");
 
-	@TargetApi(Build.VERSION_CODES.GINGERBREAD)
 	public static WifiMode getWiFiMode(Shell rootShell, String interfaceName,
 			String ipAddr) {
 		if (rootShell == null)
@@ -86,12 +83,6 @@ public enum WifiMode {
 			if (networkInterface == null)
 				return WifiMode.Off;
 
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD
-					&& !networkInterface.isUp()) {
-				/* With non-wext drivers, network type is kept even when network interface is down */
-				return WifiMode.Off;
-			}
-
 			boolean hasAddress = false;
 			if (ipAddr != null && ipAddr.contains("/"))
 				ipAddr = ipAddr.substring(0, ipAddr.indexOf('/'));
@@ -101,41 +92,12 @@ public enum WifiMode {
 					.getInetAddresses(); enumIpAddress
 					.hasMoreElements();) {
 				InetAddress iNetAddress = enumIpAddress.nextElement();
-			if (!iNetAddress.isLoopbackAddress()) {
+				if (!iNetAddress.isLoopbackAddress()) {
 					hasAddress = true;
 					if (ipAddr != null
 							&& ipAddr.equals(iNetAddress.getHostAddress()))
 						hasMatchingAddress = true;
 				}
-			}
-
-			/* maybe it works with "iw", let's try */
-			CoreTask coretask = ServalBatPhoneApplication.context.coretask;
-			CommandCapture c = new CommandCapture(coretask.DATA_FILE_PATH + "/bin/iw dev "
-					+ interfaceName + " info");
-			try {
-				if (rootShell == null) {
-					rootShell = Shell.startShell();
-				}
-				rootShell.run(c);
-				if (c.exitCode() == 0) {
-					Pattern iwTypePattern = Pattern.compile("type\\s(\\w+)");
-					Matcher m = iwTypePattern.matcher(c.toString());
-					if (m.find()) {
-						String type = m.group(1).toLowerCase();
-						if ("managed".equals(type)) {
-							return WifiMode.Client;
-						}
-						if ("ibss".equals(type)) {
-							return WifiMode.Adhoc;
-						}
-						return WifiMode.Unknown;
-					}
-				}
-				/* fall through, try something else */
-			} catch (Exception e) {
-				Log.e("WifiMode", "Cannot execute iw", e);
-				/* fall through, try something else */
 			}
 
 			if (!hasAddress)

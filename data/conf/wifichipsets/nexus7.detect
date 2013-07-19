@@ -1,5 +1,4 @@
 exists /system/bin/ndc
 exists /system/etc/firmware/bcm4330.hcd
-# same ad-hoc script as galaxynexus
-capability Adhoc galaxynexus.adhoc.edify galaxynexus.off.edify
+capability Adhoc iw.adhoc.edify
 nowirelessextensions
